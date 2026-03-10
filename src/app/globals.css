@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+:root {
+  --brand: #1a6b3c;
+  --brand-light: #e8f5ee;
+  --brand-mid: #2d8a52;
+  --accent: #ff6b2b;
+  --offer: #7c3aed;
+  --offer-light: #f3eeff;
+  --cream: #faf9f6;
+  --offwhite: #f7f6f3;
+  --text: #1a1a1a;
+  --text-mid: #444;
+  --text-light: #777;
+  --border: #e4e2dc;
+}
+
+body {
+  background: var(--cream);
+  color: var(--text);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+}
