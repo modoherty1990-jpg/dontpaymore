@@ -290,40 +290,18 @@ export default function ComparePanel({ category, onClose }) {
 function ResultRow({ item, index, results, category }) {
   const isTop = index === 0
   const hasOffer = (item.freeMonths > 0) || (item.discountedMonths > 0 && item.discountAmount > 0)
-
-  const cardStyle = {
-    border: `1.5px solid ${isTop ? 'var(--brand)' : hasOffer ? '#c4aaff' : 'var(--border)'}`,
-    borderRadius: '8px',
-    marginBottom: '0.625rem',
-    background: 'white',
-    overflow: 'hidden',
-  }
-
-  const rowStyle = {
-    display: 'grid',
-    gridTemplateColumns: '2.2fr 1fr 1.4fr auto',
-    gap: '1rem',
-    alignItems: 'center',
-    padding: '1.1rem 1.25rem',
-    background: isTop ? 'var(--brand-light)' : 'white',
-  }
+  const isBundle = item.isBundle
 
   function getSaving() {
     if (category === 'savings') {
-      return `+${(item.rate - results.userRate).toFixed(2)}% p.a. · +$${Math.round((results.balance || 10000) * (item.rate - results.userRate) / 100).toLocaleString()}/yr`
+      const extra = Math.round((results.balance || 10000) * (item.rate - results.userRate) / 100)
+      return `+${(item.rate - results.userRate).toFixed(2)}% p.a. · +$${extra.toLocaleString()}/yr`
     }
-    const saving = Math.round((results.userPrice - item.effective) * 100) / 100
+    const saving = Math.round((results.userPrice - (item.effective || item.price)) * 100) / 100
     return `Save $${saving}/mo · $${Math.round(saving * 12)}/yr`
   }
 
-  function getMainStat() {
-    if (category === 'mobile') return { label: 'Data', value: `${item.data}GB` }
-    if (category === 'broadband') return { label: 'Speed', value: item.speed >= 1000 ? 'NBN 1000' : `NBN ${item.speed}` }
-    if (category === 'savings') return { label: 'Rate p.a.', value: `${item.rate}%` }
-    if (category === 'streaming') return { label: 'Quality', value: item.quality }
-  }
-
-  function getPrice() {
+  function getEffectivePrice() {
     if (category === 'savings') return `${item.rate}%`
     if (category === 'streaming' && item.price === 0) return 'FREE'
     return `$${item.effective || item.price}`
@@ -332,55 +310,216 @@ function ResultRow({ item, index, results, category }) {
   function getPriceLabel() {
     if (category === 'savings') return 'p.a.'
     if (category === 'streaming' && item.price === 0) return 'no subscription'
+    if (hasOffer) return 'avg/month over contract'
     return '/month'
   }
 
-  const stat = getMainStat()
+  function getOfferBreakdown() {
+    if (!hasOffer) return null
+    if (item.freeMonths > 0) {
+      const paidMonths = item.contractMonths - item.freeMonths
+      return [
+        { label: `Months 1–${paidMonths}`, value: `$${item.price}/mo` },
+        { label: `Months ${paidMonths + 1}–${item.contractMonths}`, value: 'FREE' },
+        { label: 'Avg monthly cost', value: `$${item.effective}/mo`, bold: true },
+      ]
+    }
+    if (item.discountedMonths > 0 && item.discountAmount > 0) {
+      const discountedPrice = item.price - item.discountAmount
+      const remainingMonths = item.contractMonths - item.discountedMonths
+      return [
+        { label: `Months 1–${item.discountedMonths}`, value: `$${discountedPrice}/mo` },
+        { label: `Months ${item.discountedMonths + 1}–${item.contractMonths}`, value: `$${item.price}/mo` },
+        { label: 'Avg monthly cost', value: `$${item.effective}/mo`, bold: true },
+      ]
+    }
+    return null
+  }
+
+  const breakdown = getOfferBreakdown()
+
+  // Network/contract tags for mobile and broadband
+  function getTags() {
+    if (category !== 'mobile' && category !== 'broadband') return null
+    const tags = []
+    if (category === 'mobile') {
+      // Simple heuristic — bigger networks tend to have 5G
+      const has5g = ['Telstra','Optus','Vodafone','Boost Mobile','Belong','Felix Mobile'].includes(item.provider)
+      tags.push({ label: has5g ? '5G' : '4G', type: has5g ? '5g' : '4g' })
+    }
+    if (!item.contractMonths || item.contractMonths <= 1) {
+      tags.push({ label: 'No lock-in', type: 'nolock' })
+    } else {
+      tags.push({ label: `${item.contractMonths}-month contract`, type: 'contract' })
+    }
+    return tags
+  }
+
+  const tags = getTags()
+
+  const tagColors = {
+    '5g': { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe' },
+    '4g': { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' },
+    'nolock': { bg: 'var(--brand-light)', color: 'var(--brand)', border: '#a8dfc0' },
+    'contract': { bg: 'var(--offwhite)', color: 'var(--text-light)', border: 'var(--border)' },
+  }
 
   return (
-    <div style={cardStyle}>
-      {hasOffer && (
-        <div style={{background: 'var(--offer-light)', borderBottom: '1px solid #d8c8ff', padding: '0.4rem 1.25rem', fontSize: '0.72rem', fontWeight: 700, color: 'var(--offer)'}}>
-          🏷️ Special offer
+    <div style={{
+      border: `1.5px solid ${isTop ? 'var(--brand)' : hasOffer || isBundle ? '#c4aaff' : 'var(--border)'}`,
+      borderRadius: '12px',
+      marginBottom: '0.75rem',
+      background: 'white',
+      overflow: 'hidden',
+    }}>
+      {/* Banner */}
+      {isTop && !hasOffer && !isBundle && (
+        <div style={{background: 'var(--brand)', color: 'white', fontSize: '0.7rem', fontWeight: 800, padding: '0.35rem 1.25rem', letterSpacing: '0.05em', textTransform: 'uppercase'}}>
+          ★ Best value — cheapest effective monthly cost
         </div>
       )}
-      {item.isBundle && (
-        <div style={{background: 'var(--offer-light)', borderBottom: '1px solid #d8c8ff', padding: '0.4rem 1.25rem', fontSize: '0.72rem', fontWeight: 700, color: 'var(--offer)'}}>
-          🏷️ Bundle deal
+      {(hasOffer || isBundle) && (
+        <div style={{background: 'var(--offer)', color: 'white', fontSize: '0.7rem', fontWeight: 800, padding: '0.35rem 1.25rem', letterSpacing: '0.05em'}}>
+          🏷 {isBundle ? 'Bundle deal' : hasOffer && item.freeMonths > 0 ? `${item.freeMonths} months free · Avg monthly cost calculated honestly` : `$${item.discountAmount}/mo off first ${item.discountedMonths} months · Avg monthly cost calculated honestly`}
         </div>
       )}
-      <div style={rowStyle}>
+
+      {/* Main row */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: category === 'savings' ? '2fr 1fr 1.3fr auto' : '2fr 1fr 1fr 1fr 1.3fr auto',
+        alignItems: 'center',
+        padding: '1rem 1.25rem',
+        gap: '0.75rem',
+        background: isTop && !hasOffer ? 'var(--brand-light)' : 'white',
+      }}>
+        {/* Provider */}
         <div>
-          <div style={{fontSize: '0.975rem', fontWeight: 800, marginBottom: '0.15rem'}}>
-            {item.provider}
-            {isTop && <span style={{display: 'inline-flex', alignItems: 'center', background: 'var(--brand)', color: 'white', fontSize: '0.62rem', fontWeight: 700, padding: '0.12rem 0.55rem', borderRadius: '999px', marginLeft: '0.4rem'}}>★ Best value</span>}
-          </div>
-          <div style={{fontSize: '0.72rem', color: 'var(--text-light)'}}>{item.meta || item.plan}</div>
+          <div style={{fontSize: '1rem', fontWeight: 800, color: 'var(--text)'}}>{item.provider}</div>
+          <div style={{fontSize: '0.7rem', color: 'var(--text-light)', marginTop: '0.15rem'}}>{item.meta || item.plan}</div>
           {category === 'savings' && item.conditions && (
-            <div style={{fontSize: '0.72rem', color: '#555', marginTop: '0.2rem'}}>⚠ {item.conditions}</div>
+            <div style={{fontSize: '0.7rem', color: '#b45309', marginTop: '0.2rem', fontWeight: 500}}>⚠ {item.conditions}</div>
+          )}
+          {tags && (
+            <div style={{display: 'flex', gap: '0.3rem', marginTop: '0.35rem', flexWrap: 'wrap'}}>
+              {tags.map(tag => (
+                <span key={tag.label} style={{
+                  fontSize: '0.62rem', fontWeight: 700,
+                  padding: '0.15rem 0.5rem', borderRadius: '999px',
+                  border: `1px solid ${tagColors[tag.type].border}`,
+                  background: tagColors[tag.type].bg,
+                  color: tagColors[tag.type].color,
+                }}>
+                  {tag.label}
+                </span>
+              ))}
+            </div>
           )}
         </div>
-        <div>
-          <div style={{fontSize: '0.65rem', fontWeight: 600, color: 'var(--text-light)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.2rem'}}>{stat.label}</div>
-          <div style={{fontSize: '0.9rem', fontWeight: 700}}>{stat.value}</div>
+
+        {/* Stats */}
+        {category === 'mobile' && <>
+          <div style={{textAlign: 'center'}}>
+            <div style={{fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-light)', marginBottom: '0.2rem'}}>Data</div>
+            <div style={{fontSize: '1rem', fontWeight: 800}}>{item.data >= 999 ? 'Unlimited' : `${item.data}GB`}</div>
+          </div>
+          <div style={{textAlign: 'center'}}>
+            <div style={{fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-light)', marginBottom: '0.2rem'}}>Calls</div>
+            <div style={{fontSize: '1rem', fontWeight: 800}}>Unltd</div>
+          </div>
+          <div style={{textAlign: 'center'}}>
+            <div style={{fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-light)', marginBottom: '0.2rem'}}>SMS</div>
+            <div style={{fontSize: '1rem', fontWeight: 800}}>Unltd</div>
+          </div>
+        </>}
+
+        {category === 'broadband' && <>
+          <div style={{textAlign: 'center'}}>
+            <div style={{fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-light)', marginBottom: '0.2rem'}}>Speed</div>
+            <div style={{fontSize: '1rem', fontWeight: 800}}>{item.speed >= 1000 ? '1Gbps' : `${item.speed}Mbps`}</div>
+          </div>
+          <div style={{textAlign: 'center'}}>
+            <div style={{fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-light)', marginBottom: '0.2rem'}}>Eve. Speed</div>
+            <div style={{fontSize: '1rem', fontWeight: 800}}>{item.eve}</div>
+          </div>
+          <div style={{textAlign: 'center'}}>
+            <div style={{fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-light)', marginBottom: '0.2rem'}}>Contract</div>
+            <div style={{fontSize: '0.82rem', fontWeight: 800}}>{!item.contractMonths || item.contractMonths <= 1 ? 'None' : `${item.contractMonths}mo`}</div>
+          </div>
+        </>}
+
+        {category === 'savings' && <>
+          <div style={{textAlign: 'center'}}>
+            <div style={{fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-light)', marginBottom: '0.2rem'}}>Rate p.a.</div>
+            <div style={{fontSize: '1rem', fontWeight: 800}}>{item.rate}%</div>
+          </div>
+        </>}
+
+        {category === 'streaming' && <>
+          <div style={{textAlign: 'center'}}>
+            <div style={{fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-light)', marginBottom: '0.2rem'}}>Quality</div>
+            <div style={{fontSize: '1rem', fontWeight: 800}}>{item.quality}</div>
+          </div>
+          <div style={{textAlign: 'center'}}>
+            <div style={{fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-light)', marginBottom: '0.2rem'}}>Screens</div>
+            <div style={{fontSize: '1rem', fontWeight: 800}}>{item.simultaneous || '—'}</div>
+          </div>
+          <div style={{textAlign: 'center'}}>
+            <div style={{fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-light)', marginBottom: '0.2rem'}}>Type</div>
+            <div style={{fontSize: '0.78rem', fontWeight: 800}}>{item.isBundle ? 'Bundle' : 'Single'}</div>
+          </div>
+        </>}
+
+        {/* Price */}
+        <div style={{textAlign: 'center'}}>
+          {hasOffer && (
+            <div style={{fontSize: '0.62rem', color: '#bbb', marginBottom: '0.1rem'}}>Standard: <s>${item.price}/mo</s></div>
+          )}
+          {!hasOffer && <div style={{fontSize: '0.62rem', color: 'var(--text-light)', marginBottom: '0.15rem'}}>Monthly cost</div>}
+          <div style={{
+            fontSize: '1.4rem', fontWeight: 800, lineHeight: 1,
+            color: category === 'streaming' && item.price === 0 ? 'var(--brand)' : isTop ? 'var(--brand)' : 'var(--text)'
+          }}>
+            {getEffectivePrice()}
+          </div>
+          <div style={{fontSize: '0.62rem', color: 'var(--text-light)'}}>{getPriceLabel()}</div>
+          <div style={{fontSize: '0.7rem', fontWeight: 700, color: 'var(--brand)', marginTop: '0.3rem'}}>{getSaving()}</div>
         </div>
-        <div>
-          <div style={{fontSize: '1.45rem', fontWeight: 800, lineHeight: 1, margin: '0.1rem 0', color: category === 'streaming' && item.price === 0 ? 'var(--brand)' : 'var(--text)'}}>{getPrice()}</div>
-          <div style={{fontSize: '0.65rem', color: 'var(--text-light)'}}>{getPriceLabel()}</div>
-          <div style={{fontSize: '0.75rem', fontWeight: 700, color: 'var(--brand)', marginTop: '0.25rem'}}>{getSaving()}</div>
-        </div>
-        <button onClick={() => window.open(item.url, '_blank')} style={{
-          background: 'var(--brand)', color: 'white', border: 'none', fontFamily: 'inherit',
-          fontSize: '0.78rem', fontWeight: 700, padding: '0.6rem 1.25rem', borderRadius: '8px', cursor: 'pointer',
-        }}>
-          View →
+
+        {/* CTA */}
+        <button
+          onClick={() => window.open(item.url, '_blank')}
+          style={{
+            background: 'var(--brand)', color: 'white', border: 'none',
+            fontFamily: 'inherit', fontSize: '0.82rem', fontWeight: 700,
+            padding: '0.75rem 1.25rem', borderRadius: '8px', cursor: 'pointer',
+            whiteSpace: 'nowrap',
+          }}>
+          View plan →
         </button>
       </div>
+
+      {/* Offer breakdown row */}
+      {breakdown && (
+        <div style={{
+          background: 'var(--offer-light)',
+          borderTop: '1px solid #d8c8ff',
+          padding: '0.5rem 1.25rem',
+          display: 'flex',
+          gap: '2rem',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+        }}>
+          {breakdown.map((item, i) => (
+            <span key={i} style={{fontSize: '0.7rem', color: 'var(--offer)', fontWeight: item.bold ? 700 : 500}}>
+              <strong style={{fontWeight: 700}}>{item.label}:</strong> {item.value}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   )
-}
-
-// ── DATA ─────────────────────────────────────────────────────────────────────
+}// ── DATA ─────────────────────────────────────────────────────────────────────
 
 const mobilePlans = [
   {provider:"Telstra",meta:"Large network, best regional coverage",price:58,data:20,contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://telstra.com.au"},
@@ -452,15 +591,15 @@ const savingsAccounts = [
 ]
 
 const streamingServices = [
-  {provider:"Netflix",plan:"Standard with Ads",price:7.99,quality:"1080p",tags:["entertainment"],url:"https://netflix.com/au",meta:"Ad-supported · 2 screens · 1080p"},
-  {provider:"Netflix",plan:"Standard",price:18.99,quality:"1080p",tags:["entertainment"],url:"https://netflix.com/au",meta:"No ads · 2 screens · 1080p"},
-  {provider:"Stan",plan:"Basic",price:10,quality:"1080p",tags:["entertainment"],url:"https://stan.com.au",meta:"1 screen · 1080p"},
-  {provider:"Disney+",plan:"Standard",price:13.99,quality:"4K",tags:["entertainment","kids"],url:"https://disneyplus.com/en-au",meta:"4 screens · 4K · Disney, Marvel, Star Wars"},
-  {provider:"Binge",plan:"Basic",price:10,quality:"1080p",tags:["entertainment"],url:"https://binge.com.au",meta:"1 screen · 1080p"},
-  {provider:"Apple TV+",plan:"Monthly",price:12.99,quality:"4K",tags:["entertainment"],url:"https://tv.apple.com",meta:"6 screens · 4K · Originals only"},
-  {provider:"Paramount+",plan:"Monthly",price:8.99,quality:"4K",tags:["entertainment","sport"],url:"https://paramountplus.com/au",meta:"3 screens · 4K"},
-  {provider:"Kayo Sports",plan:"Basic",price:25,quality:"4K",tags:["sport"],url:"https://kayosports.com.au",meta:"2 screens · 4K · 50+ sports"},
-  {provider:"ABC iview",plan:"Free",price:0,quality:"1080p",tags:["entertainment","kids"],url:"https://iview.abc.net.au",meta:"Free forever · No subscription required"},
-  {provider:"SBS On Demand",plan:"Free",price:0,quality:"1080p",tags:["entertainment"],url:"https://sbs.com.au/ondemand",meta:"Free forever · Ad-supported"},
-  {provider:"Netflix + Disney+",plan:"Bundle",price:29.99,quality:"4K",tags:["entertainment","kids"],url:"https://netflix.com/au",meta:"Netflix Standard + Disney+ Standard",isBundle:true},
+  {provider:"Netflix",plan:"Standard with Ads",price:7.99,quality:"1080p",simultaneous:2,tags:["entertainment"],url:"https://netflix.com/au",meta:"Ad-supported · 2 screens · 1080p"},
+  {provider:"Netflix",plan:"Standard",price:18.99,quality:"1080p",simultaneous:2,tags:["entertainment"],url:"https://netflix.com/au",meta:"No ads · 2 screens · 1080p"},
+  {provider:"Stan",plan:"Basic",price:10,quality:"1080p",simultaneous:1,tags:["entertainment"],url:"https://stan.com.au",meta:"1 screen · 1080p"},
+  {provider:"Disney+",plan:"Standard",price:13.99,quality:"4K",simultaneous:4,tags:["entertainment","kids"],url:"https://disneyplus.com/en-au",meta:"4 screens · 4K · Disney, Marvel, Star Wars"},
+  {provider:"Binge",plan:"Basic",price:10,quality:"1080p",simultaneous:1,tags:["entertainment"],url:"https://binge.com.au",meta:"1 screen · 1080p"},
+  {provider:"Apple TV+",plan:"Monthly",price:12.99,quality:"4K",simultaneous:6,tags:["entertainment"],url:"https://tv.apple.com",meta:"6 screens · 4K · Originals only"},
+  {provider:"Paramount+",plan:"Monthly",price:8.99,quality:"4K",simultaneous:3,tags:["entertainment","sport"],url:"https://paramountplus.com/au",meta:"3 screens · 4K"},
+  {provider:"Kayo Sports",plan:"Basic",price:25,quality:"4K",simultaneous:2,tags:["sport"],url:"https://kayosports.com.au",meta:"2 screens · 4K · 50+ sports"},
+  {provider:"ABC iview",plan:"Free",price:0,quality:"1080p",simultaneous:99,tags:["entertainment","kids"],url:"https://iview.abc.net.au",meta:"Free forever · No subscription required"},
+  {provider:"SBS On Demand",plan:"Free",price:0,quality:"1080p",simultaneous:99,tags:["entertainment"],url:"https://sbs.com.au/ondemand",meta:"Free forever · Ad-supported"},
+  {provider:"Netflix + Disney+",plan:"Bundle",price:29.99,quality:"4K",simultaneous:4,tags:["entertainment","kids"],url:"https://netflix.com/au",meta:"Netflix Standard + Disney+ Standard",isBundle:true},
 ]
