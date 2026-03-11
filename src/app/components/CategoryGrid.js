@@ -17,11 +17,7 @@ export default function CategoryGrid({ onCategoryClick }) {
         <div style={{ fontSize: '0.82rem', color: 'var(--text-light)', marginTop: '0.2rem' }}>Tell us what you pay. We find something cheaper — or confirm you're already on a great deal.</div>
       </div>
 
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(4, 1fr)',
-        gap: '1rem',
-      }}>
+      <div className="category-grid">
         {categories.map((cat) => (
           <div
             key={cat.name}

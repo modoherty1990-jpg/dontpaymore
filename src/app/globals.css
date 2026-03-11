@@ -15,8 +15,144 @@
   --border: #e4e2dc;
 }
 
+* {
+  box-sizing: border-box;
+}
+
 body {
   background: var(--cream);
   color: var(--text);
   font-family: 'Plus Jakarta Sans', sans-serif;
+  margin: 0;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+/* RESPONSIVE — Category Grid */
+.category-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+}
+
+/* RESPONSIVE — How It Works */
+.how-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+}
+
+/* RESPONSIVE — Trust Block */
+.trust-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  align-items: center;
+}
+
+/* RESPONSIVE — Compare Panel form */
+.compare-form {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  padding: 1.75rem;
+}
+
+/* RESPONSIVE — Result Row */
+.result-row-grid {
+  display: grid;
+  grid-template-columns: 2.2fr 1fr 1.4fr auto;
+  gap: 1rem;
+  align-items: center;
+  padding: 1.1rem 1.25rem;
+}
+
+/* RESPONSIVE — Header nav */
+.header-nav {
+  display: flex;
+  gap: 2rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-mid);
+}
+
+/* RESPONSIVE — Footer */
+.footer-inner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 2rem;
+  flex-wrap: wrap;
+}
+
+/* RESPONSIVE — Hero quick cats */
+.quick-cats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+@media (max-width: 960px) {
+  .category-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .how-grid {
+    grid-template-columns: 1fr;
+  }
+  .trust-grid {
+    grid-template-columns: 1fr;
+  }
+  .result-row-grid {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+  .header-nav {
+    display: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .category-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .compare-form {
+    flex-direction: column;
+  }
+  .result-row-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .hero-title {
+    font-size: 2rem;
+  }
+}@media (max-width: 960px) {
+  .category-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .how-grid {
+    grid-template-columns: 1fr;
+  }
+  .trust-grid {
+    grid-template-columns: 1fr;
+  }
+  .result-row-grid {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+  .header-nav {
+    display: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .category-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .compare-form {
+    flex-direction: column;
+  }
+  .result-row-grid {
+    grid-template-columns: 1fr 1fr;
+  }
 }

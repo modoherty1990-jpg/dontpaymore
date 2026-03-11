@@ -19,7 +19,7 @@ export default function Header() {
         <div style={{fontSize: '1.3rem', fontWeight: 800, color: 'var(--brand)', letterSpacing: '-0.03em'}}>
           don't pay <span style={{color: 'var(--accent)'}}>more</span>
         </div>
-        <nav style={{display: 'flex', gap: '2rem', fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-mid)'}}>
+        <nav className="header-nav">
           <a href="#">Mobile</a>
           <a href="#">Broadband</a>
           <a href="#">Savings</a>

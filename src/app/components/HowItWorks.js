@@ -22,8 +22,8 @@ export default function HowItWorks() {
       <div style={{ marginBottom: '1.25rem' }}>
         <div style={{ fontSize: '1.3rem', fontWeight: 800, letterSpacing: '-0.02em' }}>How it works</div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem' }}>
-        {steps.map(step => (
+<div className="how-grid">        
+    {steps.map(step => (
           <div key={step.num} style={{
             background: 'white',
             border: '1.5px solid var(--border)',

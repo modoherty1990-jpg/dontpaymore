@@ -18,15 +18,11 @@ export default function TrustBlock() {
   ]
 
   return (
-    <div style={{
+   <div className="trust-grid" style={{
       background: 'linear-gradient(135deg, #1a6b3c 0%, #0f4a28 100%)',
       borderRadius: '12px',
       padding: '2.5rem',
       marginBottom: '3.5rem',
-      display: 'grid',
-      gridTemplateColumns: '1fr 1fr',
-      gap: '2rem',
-      alignItems: 'center',
     }}>
       <div>
         <h2 style={{
