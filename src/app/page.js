@@ -3,6 +3,10 @@ import { useState, useRef, useEffect } from 'react'
 import Header from './components/Header'
 import Hero from './components/Hero'
 import ComparePanel from './components/ComparePanel'
+import CategoryGrid from './components/CategoryGrid'
+import HowItWorks from './components/HowItWorks'
+import TrustBlock from './components/TrustBlock'
+import Footer from './components/Footer'
 
 export default function Home() {
   const [activeCategory, setActiveCategory] = useState(null)
@@ -27,7 +31,11 @@ export default function Home() {
             />
           </div>
         )}
+        <CategoryGrid onCategoryClick={setActiveCategory} />
+        <HowItWorks />
+        <TrustBlock />
       </div>
+      <Footer />
     </main>
   )
 }
