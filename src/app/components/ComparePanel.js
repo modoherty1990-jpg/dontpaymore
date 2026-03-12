@@ -1,6 +1,6 @@
 'use client'
 import { useState } from 'react'
-
+import { supabase } from '../lib/supabase'
 const editorialIntros = {
   mobile: "Australians overpay on mobile by an average of <strong>$180 a year</strong> — usually because they signed up years ago and never looked again. The market has changed dramatically: MVNOs like Boost, Amaysim and Circles.Life now run on the same Telstra and Optus towers as the big names, often at half the price. Enter what you currently pay and how much data you actually use — we'll show you every plan that beats it.",
   broadband: "NBN pricing is one of the most competitive spaces in Australia right now — but most people are still on a plan they set up at connection and haven't revisited since. <strong>Providers regularly offer 1–2 months free to new customers</strong>, which we factor into the true cost so you're not fooled by headline prices. Pick your minimum speed tier and enter your current monthly cost.",
@@ -91,52 +91,88 @@ export default function ComparePanel({ category, onClose }) {
     return Math.round((total / contract) * 100) / 100
   }
 
-  function searchMobile() {
-    const price = parseFloat(mobPrice)
-    const data = parseFloat(mobData)
-    if (!price || !data) { alert('Please enter your current price and minimum data needed.'); return }
-    const filtered = mobilePlans
-      .map(p => ({ ...p, effective: calcEffective(p) }))
-      .filter(p => p.effective < price && p.data >= data)
-      .sort((a, b) => a.effective - b.effective)
-    setResults({ items: filtered, type: 'mobile', userPrice: price })
-    setSearched(true)
-  }
+  async function searchMobile() {
+  const price = parseFloat(mobPrice)
+  const data = parseFloat(mobData)
+  if (!price || !data) { alert('Please enter your current price and minimum data needed.'); return }
 
-  function searchBroadband() {
-    const price = parseFloat(bbPrice)
-    const speed = parseInt(bbSpeed)
-    if (!price) { alert('Please enter your current price.'); return }
-    const filtered = broadbandPlans
-      .map(p => ({ ...p, effective: calcEffective(p) }))
-      .filter(p => p.effective < price && p.speed >= speed)
-      .sort((a, b) => a.effective - b.effective)
-    setResults({ items: filtered, type: 'broadband', userPrice: price, speed })
-    setSearched(true)
-  }
+  const { data: plans, error } = await supabase
+    .from('mobile_plans')
+    .select('*')
+    .lt('price', price)
+    .gte('data', data)
 
-  function searchSavings() {
-    const rate = parseFloat(savRate)
-    const balance = parseFloat(savBalance) || 10000
-    if (!rate) { alert('Please enter your current interest rate.'); return }
-    const filtered = savingsAccounts
-      .filter(p => p.rate > rate)
-      .sort((a, b) => b.rate - a.rate)
-    setResults({ items: filtered, type: 'savings', userRate: rate, balance })
-    setSearched(true)
-  }
+  if (error) { console.error(error); return }
 
-  function searchStreaming() {
-    const price = parseFloat(strPrice)
-    if (!price) { alert('Please enter your current monthly streaming spend.'); return }
-    let filtered = streamingServices
-    if (strType === 'entertainment') filtered = filtered.filter(s => s.tags.includes('entertainment'))
-    if (strType === 'sport') filtered = filtered.filter(s => s.tags.includes('sport'))
-    if (strType === 'kids') filtered = filtered.filter(s => s.tags.includes('kids') || s.tags.includes('entertainment'))
-    filtered = filtered.filter(s => s.price < price).sort((a, b) => a.price - b.price)
-    setResults({ items: filtered, type: 'streaming', userPrice: price })
-    setSearched(true)
-  }
+  const results = plans
+    .map(p => ({ ...p, effective: calcEffective(p) }))
+    .filter(p => p.effective < price)
+    .sort((a, b) => a.effective - b.effective)
+
+  setResults({ items: results, type: 'mobile', userPrice: price })
+  setSearched(true)
+}
+
+  async function searchBroadband() {
+  const price = parseFloat(bbPrice)
+  const speed = parseInt(bbSpeed)
+  if (!price) { alert('Please enter your current price.'); return }
+
+  const { data: plans, error } = await supabase
+    .from('broadband_plans')
+    .select('*')
+    .lt('price', price)
+    .gte('speed', speed)
+
+  if (error) { console.error(error); return }
+
+  const results = plans
+    .map(p => ({ ...p, effective: calcEffective(p) }))
+    .filter(p => p.effective < price)
+    .sort((a, b) => a.effective - b.effective)
+
+  setResults({ items: results, type: 'broadband', userPrice: price, speed })
+  setSearched(true)
+}
+
+  async function searchSavings() {
+  const rate = parseFloat(savRate)
+  const balance = parseFloat(savBalance) || 10000
+  if (!rate) { alert('Please enter your current interest rate.'); return }
+
+  const { data: accounts, error } = await supabase
+    .from('savings_accounts')
+    .select('*')
+    .gt('rate', rate)
+    .order('rate', { ascending: false })
+
+  if (error) { console.error(error); return }
+
+  setResults({ items: accounts, type: 'savings', userRate: rate, balance })
+  setSearched(true)
+}
+
+  async function searchStreaming() {
+  const price = parseFloat(strPrice)
+  if (!price) { alert('Please enter your current monthly streaming spend.'); return }
+
+  const { data: services, error } = await supabase
+    .from('streaming_services')
+    .select('*')
+    .lt('price', price)
+
+  if (error) { console.error(error); return }
+
+  let filtered = services
+  if (strType === 'entertainment') filtered = filtered.filter(s => s.tags.includes('entertainment'))
+  if (strType === 'sport') filtered = filtered.filter(s => s.tags.includes('sport'))
+  if (strType === 'kids') filtered = filtered.filter(s => s.tags.includes('kids') || s.tags.includes('entertainment'))
+
+  filtered = filtered.sort((a, b) => a.price - b.price)
+
+  setResults({ items: filtered, type: 'streaming', userPrice: price })
+  setSearched(true)
+}
 
   return (
     <div style={{
