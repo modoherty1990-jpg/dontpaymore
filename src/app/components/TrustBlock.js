@@ -2,23 +2,23 @@ export default function TrustBlock() {
   const points = [
     {
       icon: '🚫',
-      title: 'No paid placements',
-      desc: 'Providers cannot pay to appear higher in results. Rankings are effective price only, always.'
+      title: 'Ranked by price, nothing else',
+      desc: 'No provider can pay to appear higher. The cheapest option always comes first, full stop.'
     },
     {
       icon: '🧮',
-      title: 'Offers calculated honestly',
-      desc: 'Free months and intro discounts are factored into the true cost — not hidden or ignored.'
+      title: 'We calculate what you actually pay',
+      desc: 'Free months and intro discounts are factored in. We show the real cost, not the headline price.'
     },
     {
       icon: '✅',
-      title: 'Honest "you\'re fine" results',
-      desc: 'If you\'re already on a great deal, we say so. No fake urgency to switch.'
+      title: "We'll tell you if you're already on a good deal",
+      desc: "No fake urgency. If you don't need to switch, we'll say so."
     },
   ]
 
   return (
-   <div className="trust-grid" style={{
+    <div className="trust-grid" style={{
       background: 'linear-gradient(135deg, #1a6b3c 0%, #0f4a28 100%)',
       borderRadius: '12px',
       padding: '2.5rem',
@@ -33,10 +33,10 @@ export default function TrustBlock() {
           marginBottom: '0.75rem',
           letterSpacing: '-0.02em',
         }}>
-          Built different.<br />On purpose.
+          Why Don't Pay More is different
         </h2>
         <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: '0.875rem', lineHeight: 1.7 }}>
-          Every other comparison site in Australia makes money when you switch. That means their results are never truly unbiased. Don't Pay More works differently — providers don't pay us for placement, ever.
+          Most money saving sites rank results based on who pays them the most. That means the best deal for them isn't always the best deal for you. We do it differently — results are always ranked by real cost, nothing else.
         </p>
       </div>
 

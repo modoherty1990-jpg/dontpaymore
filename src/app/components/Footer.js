@@ -18,20 +18,7 @@ export default function Footer() {
           don't pay <span style={{ color: 'var(--accent)' }}>more</span>
         </div>
         <div style={{ fontSize: '0.72rem', color: 'var(--text-light)', lineHeight: 1.7, maxWidth: '580px' }}>
-          All plan data sourced directly from provider websites and refreshed daily. Effective monthly costs are calculated by dividing total contract cost by contract length. Don't Pay More does not accept payment from providers for placement or ranking. Always verify plan details with the provider before switching.
-        </div>
-        <div style={{ fontSize: '0.72rem', color: 'var(--text-light)', textAlign: 'right' }}>
-          <span style={{
-            display: 'inline-block',
-            width: 7, height: 7,
-            background: 'var(--brand)',
-            borderRadius: '50%',
-            marginRight: '0.3rem',
-            verticalAlign: 'middle',
-            animation: 'blink 2s ease-in-out infinite',
-          }} />
-          Data live as of today<br />
-          <span style={{ marginTop: '0.3rem', display: 'block' }}>dontpaymore.com.au</span>
+          Plan data is sourced directly from provider websites and updated regularly. Always confirm current pricing with the provider before switching.
         </div>
       </div>
     </footer>

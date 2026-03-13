@@ -2,18 +2,18 @@ export default function HowItWorks() {
   const steps = [
     {
       num: 1,
-      title: 'Tell us what you\'re paying',
-      desc: 'Enter your current monthly cost and what you need. No account required, no personal details collected.'
+      title: 'Enter what you pay',
+      desc: 'Just your current monthly cost and what you need. No account, no email, no personal details.'
     },
     {
       num: 2,
-      title: 'We calculate the true cost',
-      desc: 'Free months and intro discounts are factored in. We compare on effective monthly cost — not misleading headline prices.'
+      title: 'We calculate the real cost',
+      desc: 'Free months, intro discounts and lock-in periods are all factored in. Unlike other sites, we don\'t compare on headline price.'
     },
     {
       num: 3,
-      title: 'Get an honest answer',
-      desc: 'If something is genuinely cheaper, we show it with full working. If you\'re already on the best deal, we tell you clearly.'
+      title: 'Get a straight answer',
+      desc: 'Cheaper options shown ranked by real cost, with full working. If you\'re already on the best deal available, we\'ll tell you that too.'
     },
   ]
 
@@ -22,8 +22,8 @@ export default function HowItWorks() {
       <div style={{ marginBottom: '1.25rem' }}>
         <div style={{ fontSize: '1.3rem', fontWeight: 800, letterSpacing: '-0.02em' }}>How it works</div>
       </div>
-<div className="how-grid">        
-    {steps.map(step => (
+      <div className="how-grid">
+        {steps.map(step => (
           <div key={step.num} style={{
             background: 'white',
             border: '1.5px solid var(--border)',

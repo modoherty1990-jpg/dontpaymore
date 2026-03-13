@@ -39,8 +39,8 @@ export default function Hero({ onCategoryClick }) {
           marginBottom: '1rem',
           letterSpacing: '-0.02em',
         }}>
-          Tell us what you pay.<br />
-          <em style={{color: '#7fffb2', fontStyle: 'italic'}}>We'll find something cheaper.</em>
+          Stop overpaying.<br />
+          <em style={{color: '#7fffb2', fontStyle: 'italic'}}>Start here.</em>
         </h1>
 
         <p style={{
@@ -50,7 +50,7 @@ export default function Hero({ onCategoryClick }) {
           margin: '0 auto 2.5rem',
           lineHeight: 1.7,
         }}>
-          Australia's only comparison site that starts with your price — not a list of products that paid to be here.
+          Enter what you currently pay — we'll show you every genuinely cheaper option, or confirm you're already on a good deal.
         </p>
 
         <div style={{

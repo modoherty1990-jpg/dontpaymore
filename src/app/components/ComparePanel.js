@@ -3,10 +3,10 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 
 const editorialIntros = {
-  mobile: "Australians overpay on mobile by an average of <strong>$180 a year</strong> — usually because they signed up years ago and never looked again. The market has changed dramatically: MVNOs like Boost, Amaysim and Circles.Life now run on the same Telstra and Optus towers as the big names, often at half the price. Enter what you currently pay and how much data you actually use — we'll show you every plan that beats it.",
+  mobile: "Australians overpay on mobile by an average of <strong>$180 a year</strong> — usually because they signed up years ago and never looked again. The market has changed dramatically — you can now get the same network coverage for half the price. Enter what you currently pay and how much data you actually use — we'll show you every plan that beats it.",
   broadband: "NBN pricing is one of the most competitive spaces in Australia right now — but most people are still on a plan they set up at connection and haven't revisited since. <strong>Providers regularly offer 1–2 months free to new customers</strong>, which we factor into the true cost so you're not fooled by headline prices. Pick your minimum speed tier and enter your current monthly cost.",
   savings: "Most Australians have their savings in a big four bank earning well below the market rate. <strong>The difference between the best and worst savings rates right now is over 2%</strong> — on a $20,000 balance that's $400 a year. Enter your current rate and we'll show you every account paying more.",
-  streaming: "The average Australian household now spends over $50/month on streaming — often paying for services they barely use. Enter your total monthly streaming spend and we'll show you what's actually cheaper."
+  streaming: "The average Australian household spends over <strong>$50 a month</strong> on streaming — often across three or four services they barely use. Enter your total monthly spend and we'll show you what's cheaper, what overlaps, and whether a bundle saves you money."
 }
 
 function calcEffective(p) {
