@@ -7,8 +7,30 @@ const jakarta = Plus_Jakarta_Sans({
 })
 
 export const metadata = {
-  title: "Don't Pay More — Australia's Honest Comparison Site",
-  description: "Tell us what you pay. We'll find something cheaper.",
+  title: "Compare & Save on Mobile, NBN, Savings & Streaming | Don't Pay More",
+  description: "Enter what you currently pay — we'll show you every genuinely cheaper option, or confirm you're already on a good deal. No sponsored results. No paid placements. Always unbiased.",
+  keywords: "compare mobile plans australia, compare NBN plans, best savings account australia, cheapest streaming australia, save money on bills australia",
+  metadataBase: new URL('https://dontpaymore.com.au'),
+  alternates: {
+    canonical: '/',
+  },
+  openGraph: {
+    title: "Compare & Save on Mobile, NBN, Savings & Streaming | Don't Pay More",
+    description: "Enter what you currently pay — we'll show you every genuinely cheaper option, or confirm you're already on a good deal. No sponsored results. Always unbiased.",
+    url: 'https://dontpaymore.com.au',
+    siteName: "Don't Pay More",
+    locale: 'en_AU',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: "Compare & Save on Mobile, NBN, Savings & Streaming | Don't Pay More",
+    description: "Enter what you currently pay — we'll show you every genuinely cheaper option, or confirm you're already on a good deal.",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 }
 
 export default function RootLayout({ children }) {
