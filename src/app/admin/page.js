@@ -2,7 +2,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 
-
 const PASSWORD = 'dontpaymore2024'
 
 export default function AdminPage() {
@@ -31,6 +30,16 @@ export default function AdminPage() {
     setRows(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r))
   }
 
+  async function toggleHidden(row) {
+    const newVal = !row.hidden
+    const { error } = await supabase.from(activeTable).update({ hidden: newVal }).eq('id', row.id)
+    if (!error) {
+      setRows(prev => prev.map(r => r.id === row.id ? { ...r, hidden: newVal } : r))
+      setMessage(newVal ? 'Plan hidden ✓' : 'Plan visible ✓')
+      setTimeout(() => setMessage(''), 2000)
+    }
+  }
+
   async function saveRow(row) {
     setSaving(true)
     const { error } = await supabase.from(activeTable).update(row).eq('id', row.id)
@@ -46,7 +55,7 @@ export default function AdminPage() {
   }
 
   async function addRow() {
-    const newRow = { provider: 'New Provider', price: 0 }
+    const newRow = { provider: 'New Provider', price: 0, hidden: false }
     const { data, error } = await supabase.from(activeTable).insert(newRow).select()
     if (!error) setRows(prev => [...prev, data[0]])
   }
@@ -73,13 +82,17 @@ export default function AdminPage() {
     </div>
   )
 
-  const columns = rows.length > 0 ? Object.keys(rows[0]).filter(k => k !== 'created_at') : []
+  const columns = rows.length > 0
+    ? Object.keys(rows[0]).filter(k => k !== 'created_at' && k !== 'hidden')
+    : []
+
+  const hiddenCount = rows.filter(r => r.hidden).length
 
   return (
     <div style={{ padding: '2rem', fontFamily: 'sans-serif', maxWidth: '100%', overflowX: 'auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
         <h1 style={{ fontSize: '1.5rem', fontWeight: 800 }}>Don't Pay More — Admin</h1>
-        {message && <span style={{ color: 'green', fontWeight: 700 }}>{message}</span>}
+        {message && <span style={{ color: '#1a6b3c', fontWeight: 700 }}>{message}</span>}
       </div>
 
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
@@ -92,11 +105,18 @@ export default function AdminPage() {
         ))}
       </div>
 
+      {hiddenCount > 0 && (
+        <p style={{ marginBottom: '1rem', fontSize: '0.85rem', color: '#888' }}>
+          {hiddenCount} plan{hiddenCount > 1 ? 's' : ''} currently hidden from the site
+        </p>
+      )}
+
       {loading ? <p>Loading...</p> : (
         <>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
             <thead>
               <tr>
+                <th style={{ textAlign: 'left', padding: '0.5rem', background: '#f5f5f5', borderBottom: '2px solid #ddd', whiteSpace: 'nowrap' }}>Visible</th>
                 {columns.map(col => (
                   <th key={col} style={{ textAlign: 'left', padding: '0.5rem', background: '#f5f5f5', borderBottom: '2px solid #ddd', whiteSpace: 'nowrap' }}>{col}</th>
                 ))}
@@ -105,7 +125,26 @@ export default function AdminPage() {
             </thead>
             <tbody>
               {rows.map(row => (
-                <tr key={row.id} style={{ borderBottom: '1px solid #eee' }}>
+                <tr key={row.id} style={{
+                  borderBottom: '1px solid #eee',
+                  opacity: row.hidden ? 0.45 : 1,
+                  background: row.hidden ? '#fff8f8' : 'white'
+                }}>
+                  {/* Hidden toggle */}
+                  <td style={{ padding: '0.3rem', textAlign: 'center' }}>
+                    <button
+                      onClick={() => toggleHidden(row)}
+                      title={row.hidden ? 'Click to show on site' : 'Click to hide from site'}
+                      style={{
+                        width: '2rem', height: '2rem', borderRadius: '50%', border: 'none',
+                        cursor: 'pointer', fontSize: '1rem',
+                        background: row.hidden ? '#fee2e2' : '#dcfce7',
+                      }}
+                    >
+                      {row.hidden ? '🙈' : '👁️'}
+                    </button>
+                  </td>
+
                   {columns.map(col => (
                     <td key={col} style={{ padding: '0.3rem' }}>
                       {col === 'id' ? row[col] : (

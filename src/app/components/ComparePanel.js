@@ -1,321 +1,120 @@
 'use client'
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
+
 const editorialIntros = {
   mobile: "Australians overpay on mobile by an average of <strong>$180 a year</strong> — usually because they signed up years ago and never looked again. The market has changed dramatically: MVNOs like Boost, Amaysim and Circles.Life now run on the same Telstra and Optus towers as the big names, often at half the price. Enter what you currently pay and how much data you actually use — we'll show you every plan that beats it.",
   broadband: "NBN pricing is one of the most competitive spaces in Australia right now — but most people are still on a plan they set up at connection and haven't revisited since. <strong>Providers regularly offer 1–2 months free to new customers</strong>, which we factor into the true cost so you're not fooled by headline prices. Pick your minimum speed tier and enter your current monthly cost.",
-  savings: "With the RBA cash rate elevated, savings account rates have risen sharply — but your bank almost certainly hasn't passed the full increase on. <strong>The gap between the best and worst savings rates in Australia is currently over 2% p.a.</strong> — on a $20,000 balance, that's $400 a year you're leaving on the table. Enter your current rate and balance.",
-  streaming: "The average Australian household now spends over <strong>$50 a month on streaming</strong> — and subscription creep is real. Services that launched cheaply have steadily raised prices while most people haven't reassessed. Enter your total monthly streaming spend and what you mainly watch.",
+  savings: "Most Australians have their savings in a big four bank earning well below the market rate. <strong>The difference between the best and worst savings rates right now is over 2%</strong> — on a $20,000 balance that's $400 a year. Enter your current rate and we'll show you every account paying more.",
+  streaming: "The average Australian household now spends over $50/month on streaming — often paying for services they barely use. Enter your total monthly streaming spend and we'll show you what's actually cheaper."
 }
 
-const editorialFooters = {
-  mobile: "<strong>Switching mobile is one of the easiest bill reductions you can make</strong> — number porting takes under 24 hours and your number comes with you. Watch out for plans with data expiry and check whether your phone is unlocked before switching networks.",
-  broadband: "<strong>Evening speeds matter more than peak speeds</strong> — the headline \"NBN 100\" speed is a maximum, not a guarantee. Providers like Aussie Broadband and Superloop consistently top independent speed tests during peak hours (7–11pm). Most no-lock-in plans let you leave with 30 days notice.",
-  savings: "<strong>Always read the conditions before opening a new savings account</strong> — most high rates require a monthly deposit and no withdrawals to qualify. Missing one month's condition typically drops you to the base rate for that entire month. Your money is protected under the Australian Government's Financial Claims Scheme up to $250,000.",
-  streaming: "<strong>Before subscribing to a new service, check whether your existing subscriptions overlap.</strong> Disney+ includes Star content that duplicates a lot of what Binge offers. Many services also offer annual billing at a discount of up to 20% versus monthly.",
+function calcEffective(p) {
+  if (!p.contract_months || p.contract_months <= 1) return p.price
+  const totalCost = (p.price * (p.contract_months - (p.free_months || 0))) - ((p.discount_amount || 0) * (p.discounted_months || 0))
+  return Math.round((totalCost / p.contract_months) * 100) / 100
 }
 
-const panelTitles = {
-  mobile: '📱 Compare Mobile Plans',
-  broadband: '🌐 Compare Home Broadband',
-  savings: '🏦 Compare Savings Accounts',
-  streaming: '📺 Compare Streaming',
-}
+function OverpayingBanner({ results, category }) {
+  const [email, setEmail] = useState('')
+  const [submitted, setSubmitted] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
 
-export default function ComparePanel({ category, onClose }) {
-  const [results, setResults] = useState(null)
-  const [searched, setSearched] = useState(false)
+  if (!results || results.items.length === 0) return null
 
-  // Mobile form state
-  const [mobPrice, setMobPrice] = useState('')
-  const [mobData, setMobData] = useState('')
-
-  // Broadband form state
-  const [bbPrice, setBbPrice] = useState('')
-  const [bbSpeed, setBbSpeed] = useState('50')
-
-  // Savings form state
-  const [savRate, setSavRate] = useState('')
-  const [savBalance, setSavBalance] = useState('')
-
-  // Streaming form state
-  const [strPrice, setStrPrice] = useState('')
-  const [strType, setStrType] = useState('all')
-
-  if (!category) return null
-
-  const inputStyle = {
-    fontFamily: 'inherit',
-    fontSize: '0.95rem',
-    fontWeight: 500,
-    padding: '0.75rem 1rem',
-    border: '1.5px solid var(--border)',
-    borderRadius: '8px',
-    background: 'var(--offwhite)',
-    color: 'var(--text)',
-    outline: 'none',
-    width: '100%',
+  let maxSaving = 0
+  if (category === 'savings') {
+    const best = results.items[0]
+    maxSaving = Math.round((results.balance || 10000) * (best.rate - results.userRate) / 100)
+  } else {
+    const cheapest = results.items[0]
+    maxSaving = Math.round((results.userPrice - (cheapest.effective || cheapest.price)) * 12)
   }
 
-  const labelStyle = {
-    fontSize: '0.75rem',
-    fontWeight: 700,
-    color: 'var(--text-mid)',
-    textTransform: 'uppercase',
-    letterSpacing: '0.06em',
-    marginBottom: '0.4rem',
-    display: 'block',
+  if (maxSaving <= 0) return null
+
+  async function handleSubmit() {
+    if (!email || !email.includes('@')) return
+    setSubmitting(true)
+    await supabase.from('email_signups').insert({
+      email,
+      category,
+      user_price: results.userPrice || results.userRate,
+      signup_type: 'both',
+    })
+    setSubmitted(true)
+    setSubmitting(false)
   }
-
-  const fieldStyle = {
-    display: 'flex',
-    flexDirection: 'column',
-    flex: 1,
-    minWidth: '150px',
-  }
-
-  function handleSearch() {
-    if (category === 'mobile') searchMobile()
-    if (category === 'broadband') searchBroadband()
-    if (category === 'savings') searchSavings()
-    if (category === 'streaming') searchStreaming()
-  }
-
-  function calcEffective(p) {
-    const contract = p.contractMonths || 1
-    const free = p.freeMonths || 0
-    const discMonths = p.discountedMonths || 0
-    const discAmt = p.discountAmount || 0
-    const paidMonths = contract - free
-    const total = (p.price * paidMonths) - (discAmt * discMonths)
-    return Math.round((total / contract) * 100) / 100
-  }
-
-  async function searchMobile() {
-  const price = parseFloat(mobPrice)
-  const data = parseFloat(mobData)
-  if (!price || !data) { alert('Please enter your current price and minimum data needed.'); return }
-
-  const { data: plans, error } = await supabase
-    .from('mobile_plans')
-    .select('*')
-    .lt('price', price)
-    .gte('data', data)
-
-  if (error) { console.error(error); return }
-
-  const results = plans
-    .map(p => ({ ...p, effective: calcEffective(p) }))
-    .filter(p => p.effective < price)
-    .sort((a, b) => a.effective - b.effective)
-
-  setResults({ items: results, type: 'mobile', userPrice: price })
-  setSearched(true)
-}
-
-  async function searchBroadband() {
-  const price = parseFloat(bbPrice)
-  const speed = parseInt(bbSpeed)
-  if (!price) { alert('Please enter your current price.'); return }
-
-  const { data: plans, error } = await supabase
-    .from('broadband_plans')
-    .select('*')
-    .lt('price', price)
-    .gte('speed', speed)
-
-  if (error) { console.error(error); return }
-
-  const results = plans
-    .map(p => ({ ...p, effective: calcEffective(p) }))
-    .filter(p => p.effective < price)
-    .sort((a, b) => a.effective - b.effective)
-
-  setResults({ items: results, type: 'broadband', userPrice: price, speed })
-  setSearched(true)
-}
-
-  async function searchSavings() {
-  const rate = parseFloat(savRate)
-  const balance = parseFloat(savBalance) || 10000
-  if (!rate) { alert('Please enter your current interest rate.'); return }
-
-  const { data: accounts, error } = await supabase
-    .from('savings_accounts')
-    .select('*')
-    .gt('rate', rate)
-    .order('rate', { ascending: false })
-
-  if (error) { console.error(error); return }
-
-  setResults({ items: accounts, type: 'savings', userRate: rate, balance })
-  setSearched(true)
-}
-
-  async function searchStreaming() {
-  const price = parseFloat(strPrice)
-  if (!price) { alert('Please enter your current monthly streaming spend.'); return }
-
-  const { data: services, error } = await supabase
-    .from('streaming_services')
-    .select('*')
-    .lt('price', price)
-
-  if (error) { console.error(error); return }
-
-  let filtered = services
-  if (strType === 'entertainment') filtered = filtered.filter(s => s.tags.includes('entertainment'))
-  if (strType === 'sport') filtered = filtered.filter(s => s.tags.includes('sport'))
-  if (strType === 'kids') filtered = filtered.filter(s => s.tags.includes('kids') || s.tags.includes('entertainment'))
-
-  filtered = filtered.sort((a, b) => a.price - b.price)
-
-  setResults({ items: filtered, type: 'streaming', userPrice: price })
-  setSearched(true)
-}
 
   return (
     <div style={{
-      background: 'white',
-      border: '1.5px solid var(--border)',
+      background: '#fff8e6',
+      border: '1.5px solid #f5c518',
       borderRadius: '12px',
-      overflow: 'hidden',
-      marginBottom: '3.5rem',
+      padding: '1rem 1.25rem',
+      marginBottom: '1.25rem',
     }}>
-      {/* Header */}
-      <div style={{
-        background: 'var(--brand-light)',
-        borderBottom: '1px solid var(--border)',
-        padding: '1.25rem 1.75rem',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-      }}>
-        <div style={{fontSize: '1.05rem', fontWeight: 800, color: 'var(--brand)'}}>{panelTitles[category]}</div>
-        <button onClick={onClose} style={{background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: 'var(--text-light)'}}>✕</button>
-      </div>
-
-      {/* Editorial Intro */}
-      <div style={{padding: '1.25rem 1.75rem', borderBottom: '1px solid var(--border)'}}>
-        <p style={{fontSize: '0.875rem', color: 'var(--text-mid)', lineHeight: 1.75, maxWidth: '720px'}}
-          dangerouslySetInnerHTML={{__html: editorialIntros[category]}} />
-      </div>
-
-      {/* Form */}
-      <div style={{padding: '1.75rem', display: 'flex', gap: '1rem', alignItems: 'flex-end', flexWrap: 'wrap'}}>
-        {category === 'mobile' && <>
-          <div style={fieldStyle}>
-            <label style={labelStyle}>What you currently pay ($/mo)</label>
-            <input style={inputStyle} type="number" placeholder="e.g. 45" value={mobPrice} onChange={e => setMobPrice(e.target.value)} />
-          </div>
-          <div style={fieldStyle}>
-            <label style={labelStyle}>Minimum data you need (GB)</label>
-            <input style={inputStyle} type="number" placeholder="e.g. 20" value={mobData} onChange={e => setMobData(e.target.value)} />
-          </div>
-        </>}
-
-        {category === 'broadband' && <>
-          <div style={fieldStyle}>
-            <label style={labelStyle}>What you currently pay ($/mo)</label>
-            <input style={inputStyle} type="number" placeholder="e.g. 89" value={bbPrice} onChange={e => setBbPrice(e.target.value)} />
-          </div>
-          <div style={fieldStyle}>
-            <label style={labelStyle}>Minimum speed tier</label>
-            <select style={inputStyle} value={bbSpeed} onChange={e => setBbSpeed(e.target.value)}>
-              <option value="25">NBN 25 — Basic</option>
-              <option value="50">NBN 50 — Standard</option>
-              <option value="100">NBN 100 — Fast</option>
-              <option value="250">NBN 250 — Superfast</option>
-              <option value="1000">NBN 1000 — Ultrafast</option>
-            </select>
-          </div>
-        </>}
-
-        {category === 'savings' && <>
-          <div style={fieldStyle}>
-            <label style={labelStyle}>Your current interest rate (% p.a.)</label>
-            <input style={inputStyle} type="number" placeholder="e.g. 4.50" step="0.01" value={savRate} onChange={e => setSavRate(e.target.value)} />
-          </div>
-          <div style={fieldStyle}>
-            <label style={labelStyle}>Your balance (for $ comparison)</label>
-            <input style={inputStyle} type="number" placeholder="e.g. 10000" value={savBalance} onChange={e => setSavBalance(e.target.value)} />
-          </div>
-        </>}
-
-        {category === 'streaming' && <>
-          <div style={fieldStyle}>
-            <label style={labelStyle}>Your total monthly streaming spend ($/mo)</label>
-            <input style={inputStyle} type="number" placeholder="e.g. 45" value={strPrice} onChange={e => setStrPrice(e.target.value)} />
-          </div>
-          <div style={fieldStyle}>
-            <label style={labelStyle}>What do you mainly watch?</label>
-            <select style={inputStyle} value={strType} onChange={e => setStrType(e.target.value)}>
-              <option value="all">Everything — shows, movies, sport, kids</option>
-              <option value="entertainment">Shows & movies only</option>
-              <option value="sport">Sport essential</option>
-              <option value="kids">Kids content essential</option>
-            </select>
-          </div>
-        </>}
-
-        <button onClick={handleSearch} style={{
-          background: 'var(--brand)',
-          color: 'white',
-          border: 'none',
-          fontFamily: 'inherit',
-          fontSize: '0.9rem',
-          fontWeight: 700,
-          padding: '0.75rem 2rem',
-          borderRadius: '8px',
-          cursor: 'pointer',
-          whiteSpace: 'nowrap',
-          flexShrink: 0,
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+        <div style={{
+          width: '32px', height: '32px', borderRadius: '50%',
+          background: '#f5c518', display: 'flex', alignItems: 'center',
+          justifyContent: 'center', flexShrink: 0,
         }}>
-          Find cheaper →
-        </button>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <path d="M12 2L2 20h20L12 2z" fill="#7a5c00"/>
+            <path d="M12 9v5M12 16v1" stroke="#7a5c00" strokeWidth="2" strokeLinecap="round"/>
+          </svg>
+        </div>
+        <div>
+          <div style={{ fontSize: '15px', fontWeight: 700, color: '#7a5c00' }}>
+            You could be overpaying by up to <strong>${maxSaving.toLocaleString()}/year</strong>
+          </div>
+          <div style={{ fontSize: '12px', color: '#9a7300', marginTop: '2px' }}>
+            {results.items.length} cheaper option{results.items.length !== 1 ? 's' : ''} found below
+          </div>
+        </div>
       </div>
 
-      {/* Results */}
-      {searched && (
-        <div style={{padding: '0 1.75rem 1.75rem'}}>
-          <div style={{borderTop: '1px solid var(--border)', padding: '1rem 0', marginBottom: '0.75rem'}}>
-            <strong style={{fontSize: '0.875rem'}}>
-              {results.items.length
-                ? `${results.items.length} cheaper option${results.items.length !== 1 ? 's' : ''} found`
-                : category === 'savings' ? "You're on a great rate." : "You're on a great deal."
-              }
-            </strong>
+      {submitted ? (
+        <div style={{
+          background: '#f0faf5', border: '1px solid #a8dfc0', borderRadius: '8px',
+          padding: '0.6rem 1rem', fontSize: '13px', color: '#1a6b3c', fontWeight: 600,
+        }}>
+          ✓ Done! We'll remind you in 12 months and send you the best deals each month.
+        </div>
+      ) : (
+        <div>
+          <div style={{ fontSize: '12px', fontWeight: 600, color: '#7a5c00', marginBottom: '7px' }}>
+            Get a reminder in 12 months + our monthly best deals newsletter
           </div>
-
-          {results.items.length === 0 && (
-            <div style={{
-              border: '2px solid var(--brand)',
-              borderRadius: '12px',
-              padding: '2.5rem 2rem',
-              textAlign: 'center',
-              background: 'var(--brand-light)',
-            }}>
-              <div style={{width: 56, height: 56, background: 'var(--brand)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem', fontSize: '1.5rem', color: 'white'}}>✓</div>
-              <div style={{fontSize: '1.2rem', fontWeight: 800, color: 'var(--brand)', marginBottom: '0.5rem'}}>Nothing better found in market.</div>
-              <div style={{fontSize: '0.875rem', color: 'var(--text-mid)', lineHeight: 1.7}}>We checked every plan in our database and couldn't find anything that beats yours. You're already on a competitive deal.</div>
-            </div>
-          )}
-
-          {results.items.map((item, i) => (
-            <ResultRow key={i} item={item} index={i} results={results} category={category} />
-          ))}
-
-          {/* Editorial Footer */}
-          <div style={{
-            marginTop: '1.25rem',
-            background: 'var(--offwhite)',
-            border: '1.5px solid var(--border)',
-            borderRadius: '8px',
-            padding: '1rem 1.25rem',
-          }}>
-            <div style={{fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--brand)', marginBottom: '0.4rem'}}>💡 Good to know</div>
-            <p style={{fontSize: '0.82rem', color: 'var(--text-mid)', lineHeight: 1.7}}
-              dangerouslySetInnerHTML={{__html: editorialFooters[category]}} />
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+              placeholder="your@email.com"
+              style={{
+                flex: 1, minWidth: '200px', padding: '8px 12px',
+                border: '1.5px solid #d4a800', borderRadius: '8px',
+                background: 'white', fontSize: '14px', fontFamily: 'inherit', outline: 'none',
+              }}
+            />
+            <button
+              onClick={handleSubmit}
+              disabled={submitting}
+              style={{
+                padding: '8px 18px', background: '#1a6b3c', color: 'white',
+                border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 700,
+                cursor: submitting ? 'not-allowed' : 'pointer', opacity: submitting ? 0.7 : 1,
+                fontFamily: 'inherit', whiteSpace: 'nowrap',
+              }}
+            >
+              {submitting ? 'Saving...' : 'Notify me'}
+            </button>
+          </div>
+          <div style={{ fontSize: '11px', color: '#9a7300', marginTop: '5px' }}>
+            No spam. Unsubscribe any time.
           </div>
         </div>
       )}
@@ -323,10 +122,230 @@ export default function ComparePanel({ category, onClose }) {
   )
 }
 
+export default function ComparePanel() {
+  const [category, setCategory] = useState('mobile')
+  const [results, setResults] = useState(null)
+  const [searched, setSearched] = useState(false)
+  const [loading, setLoading] = useState(false)
+
+  const [mobPrice, setMobPrice] = useState('')
+  const [mobData, setMobData] = useState('')
+  const [bbPrice, setBbPrice] = useState('')
+  const [bbSpeed, setBbSpeed] = useState('50')
+  const [savRate, setSavRate] = useState('')
+  const [savBalance, setSavBalance] = useState('')
+  const [strPrice, setStrPrice] = useState('')
+  const [strType, setStrType] = useState('any')
+
+  async function searchMobile() {
+    const price = parseFloat(mobPrice)
+    const data = parseFloat(mobData)
+    if (!price || !data) { alert('Please enter your current price and minimum data needed.'); return }
+    setLoading(true)
+    const { data: plans, error } = await supabase
+      .from('mobile_plans').select('*').eq('hidden', false).lt('price', price).gte('data', data)
+    if (error) { console.error(error); setLoading(false); return }
+    const res = plans.map(p => ({ ...p, effective: calcEffective(p) })).filter(p => p.effective < price).sort((a, b) => a.effective - b.effective)
+    setResults({ items: res, type: 'mobile', userPrice: price })
+    setSearched(true); setLoading(false)
+  }
+
+  async function searchBroadband() {
+    const price = parseFloat(bbPrice)
+    const speed = parseInt(bbSpeed)
+    if (!price) { alert('Please enter your current price.'); return }
+    setLoading(true)
+    const { data: plans, error } = await supabase
+      .from('broadband_plans').select('*').eq('hidden', false).lt('price', price).gte('speed', speed)
+    if (error) { console.error(error); setLoading(false); return }
+    const res = plans.map(p => ({ ...p, effective: calcEffective(p) })).filter(p => p.effective < price).sort((a, b) => a.effective - b.effective)
+    setResults({ items: res, type: 'broadband', userPrice: price, speed })
+    setSearched(true); setLoading(false)
+  }
+
+  async function searchSavings() {
+    const rate = parseFloat(savRate)
+    const balance = parseFloat(savBalance) || 10000
+    if (!rate) { alert('Please enter your current interest rate.'); return }
+    setLoading(true)
+    const { data: accounts, error } = await supabase
+      .from('savings_accounts').select('*').eq('hidden', false).gt('rate', rate).order('rate', { ascending: false })
+    if (error) { console.error(error); setLoading(false); return }
+    setResults({ items: accounts, type: 'savings', userRate: rate, balance })
+    setSearched(true); setLoading(false)
+  }
+
+  async function searchStreaming() {
+    const price = parseFloat(strPrice)
+    if (!price) { alert('Please enter your current monthly streaming spend.'); return }
+    setLoading(true)
+    const { data: services, error } = await supabase
+      .from('streaming_services').select('*').eq('hidden', false).lt('price', price)
+    if (error) { console.error(error); setLoading(false); return }
+    let filtered = services
+    if (strType === 'entertainment') filtered = filtered.filter(s => s.tags && s.tags.includes('entertainment'))
+    if (strType === 'sport') filtered = filtered.filter(s => s.tags && s.tags.includes('sport'))
+    if (strType === 'kids') filtered = filtered.filter(s => s.tags && (s.tags.includes('kids') || s.tags.includes('entertainment')))
+    filtered = filtered.sort((a, b) => a.price - b.price)
+    setResults({ items: filtered, type: 'streaming', userPrice: price })
+    setSearched(true); setLoading(false)
+  }
+
+  function handleSearch() {
+    if (category === 'mobile') searchMobile()
+    else if (category === 'broadband') searchBroadband()
+    else if (category === 'savings') searchSavings()
+    else if (category === 'streaming') searchStreaming()
+  }
+
+  const categories = [
+    { id: 'mobile', label: '📱 Mobile' },
+    { id: 'broadband', label: '🌐 Broadband' },
+    { id: 'savings', label: '💰 Savings' },
+    { id: 'streaming', label: '📺 Streaming' },
+  ]
+
+  return (
+    <section style={{ background: 'var(--cream)', padding: '3rem 1rem' }}>
+      <div style={{ maxWidth: '860px', margin: '0 auto' }}>
+
+        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+          {categories.map(c => (
+            <button key={c.id} onClick={() => { setCategory(c.id); setResults(null); setSearched(false) }} style={{
+              padding: '0.6rem 1.25rem', borderRadius: '999px', border: '2px solid',
+              borderColor: category === c.id ? 'var(--brand)' : 'var(--border)',
+              background: category === c.id ? 'var(--brand)' : 'white',
+              color: category === c.id ? 'white' : 'var(--text)',
+              fontFamily: 'inherit', fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer',
+            }}>{c.label}</button>
+          ))}
+        </div>
+
+        <p style={{ fontSize: '0.9rem', color: 'var(--text-light)', marginBottom: '1.5rem', lineHeight: 1.6 }}
+          dangerouslySetInnerHTML={{ __html: editorialIntros[category] }} />
+
+        <div style={{
+          background: 'white', borderRadius: '16px', padding: '1.5rem',
+          border: '1.5px solid var(--border)', marginBottom: '1.5rem',
+          display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'flex-end'
+        }}>
+          {category === 'mobile' && <>
+            <div style={{ flex: 1, minWidth: '160px' }}>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, marginBottom: '0.4rem', color: 'var(--text-light)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>What you pay now</label>
+              <div style={{ display: 'flex', alignItems: 'center', border: '1.5px solid var(--border)', borderRadius: '8px', overflow: 'hidden' }}>
+                <span style={{ padding: '0 0.75rem', color: 'var(--text-light)', fontSize: '1rem', fontWeight: 700, background: '#f9f9f9' }}>$</span>
+                <input type="number" value={mobPrice} onChange={e => setMobPrice(e.target.value)} placeholder="65" style={{ flex: 1, border: 'none', padding: '0.75rem 0.75rem 0.75rem 0.25rem', fontSize: '1rem', fontFamily: 'inherit', outline: 'none' }} />
+                <span style={{ padding: '0 0.75rem', color: 'var(--text-light)', fontSize: '0.8rem', background: '#f9f9f9' }}>/mo</span>
+              </div>
+            </div>
+            <div style={{ flex: 1, minWidth: '160px' }}>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, marginBottom: '0.4rem', color: 'var(--text-light)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Minimum data needed</label>
+              <div style={{ display: 'flex', alignItems: 'center', border: '1.5px solid var(--border)', borderRadius: '8px', overflow: 'hidden' }}>
+                <input type="number" value={mobData} onChange={e => setMobData(e.target.value)} placeholder="20" style={{ flex: 1, border: 'none', padding: '0.75rem', fontSize: '1rem', fontFamily: 'inherit', outline: 'none' }} />
+                <span style={{ padding: '0 0.75rem', color: 'var(--text-light)', fontSize: '0.8rem', background: '#f9f9f9' }}>GB</span>
+              </div>
+            </div>
+          </>}
+
+          {category === 'broadband' && <>
+            <div style={{ flex: 1, minWidth: '160px' }}>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, marginBottom: '0.4rem', color: 'var(--text-light)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>What you pay now</label>
+              <div style={{ display: 'flex', alignItems: 'center', border: '1.5px solid var(--border)', borderRadius: '8px', overflow: 'hidden' }}>
+                <span style={{ padding: '0 0.75rem', color: 'var(--text-light)', fontSize: '1rem', fontWeight: 700, background: '#f9f9f9' }}>$</span>
+                <input type="number" value={bbPrice} onChange={e => setBbPrice(e.target.value)} placeholder="89" style={{ flex: 1, border: 'none', padding: '0.75rem 0.75rem 0.75rem 0.25rem', fontSize: '1rem', fontFamily: 'inherit', outline: 'none' }} />
+                <span style={{ padding: '0 0.75rem', color: 'var(--text-light)', fontSize: '0.8rem', background: '#f9f9f9' }}>/mo</span>
+              </div>
+            </div>
+            <div style={{ flex: 1, minWidth: '160px' }}>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, marginBottom: '0.4rem', color: 'var(--text-light)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Minimum speed</label>
+              <select value={bbSpeed} onChange={e => setBbSpeed(e.target.value)} style={{ width: '100%', padding: '0.75rem', border: '1.5px solid var(--border)', borderRadius: '8px', fontSize: '1rem', fontFamily: 'inherit', background: 'white' }}>
+                <option value="25">Basic Evening Speed (25 Mbps)</option>
+                <option value="50">Standard Evening Speed (50 Mbps)</option>
+                <option value="100">Fast Evening Speed (100 Mbps)</option>
+                <option value="250">Superfast (250 Mbps)</option>
+                <option value="1000">Ultrafast (1 Gbps)</option>
+              </select>
+            </div>
+          </>}
+
+          {category === 'savings' && <>
+            <div style={{ flex: 1, minWidth: '160px' }}>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, marginBottom: '0.4rem', color: 'var(--text-light)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Your current rate</label>
+              <div style={{ display: 'flex', alignItems: 'center', border: '1.5px solid var(--border)', borderRadius: '8px', overflow: 'hidden' }}>
+                <input type="number" value={savRate} onChange={e => setSavRate(e.target.value)} placeholder="2.5" step="0.01" style={{ flex: 1, border: 'none', padding: '0.75rem', fontSize: '1rem', fontFamily: 'inherit', outline: 'none' }} />
+                <span style={{ padding: '0 0.75rem', color: 'var(--text-light)', fontSize: '0.8rem', background: '#f9f9f9' }}>% p.a.</span>
+              </div>
+            </div>
+            <div style={{ flex: 1, minWidth: '160px' }}>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, marginBottom: '0.4rem', color: 'var(--text-light)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Balance (optional)</label>
+              <div style={{ display: 'flex', alignItems: 'center', border: '1.5px solid var(--border)', borderRadius: '8px', overflow: 'hidden' }}>
+                <span style={{ padding: '0 0.75rem', color: 'var(--text-light)', fontSize: '1rem', fontWeight: 700, background: '#f9f9f9' }}>$</span>
+                <input type="number" value={savBalance} onChange={e => setSavBalance(e.target.value)} placeholder="10,000" style={{ flex: 1, border: 'none', padding: '0.75rem 0.75rem 0.75rem 0.25rem', fontSize: '1rem', fontFamily: 'inherit', outline: 'none' }} />
+              </div>
+            </div>
+          </>}
+
+          {category === 'streaming' && <>
+            <div style={{ flex: 1, minWidth: '160px' }}>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, marginBottom: '0.4rem', color: 'var(--text-light)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Monthly streaming spend</label>
+              <div style={{ display: 'flex', alignItems: 'center', border: '1.5px solid var(--border)', borderRadius: '8px', overflow: 'hidden' }}>
+                <span style={{ padding: '0 0.75rem', color: 'var(--text-light)', fontSize: '1rem', fontWeight: 700, background: '#f9f9f9' }}>$</span>
+                <input type="number" value={strPrice} onChange={e => setStrPrice(e.target.value)} placeholder="45" style={{ flex: 1, border: 'none', padding: '0.75rem 0.75rem 0.75rem 0.25rem', fontSize: '1rem', fontFamily: 'inherit', outline: 'none' }} />
+                <span style={{ padding: '0 0.75rem', color: 'var(--text-light)', fontSize: '0.8rem', background: '#f9f9f9' }}>/mo</span>
+              </div>
+            </div>
+            <div style={{ flex: 1, minWidth: '160px' }}>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, marginBottom: '0.4rem', color: 'var(--text-light)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Content type</label>
+              <select value={strType} onChange={e => setStrType(e.target.value)} style={{ width: '100%', padding: '0.75rem', border: '1.5px solid var(--border)', borderRadius: '8px', fontSize: '1rem', fontFamily: 'inherit', background: 'white' }}>
+                <option value="any">Any</option>
+                <option value="entertainment">Entertainment / Drama</option>
+                <option value="sport">Sport</option>
+                <option value="kids">Kids</option>
+              </select>
+            </div>
+          </>}
+
+          <button onClick={handleSearch} disabled={loading} style={{
+            background: 'var(--accent)', color: 'white', border: 'none',
+            fontFamily: 'inherit', fontSize: '1rem', fontWeight: 800,
+            padding: '0.75rem 2rem', borderRadius: '8px', cursor: loading ? 'not-allowed' : 'pointer',
+            opacity: loading ? 0.7 : 1, whiteSpace: 'nowrap',
+          }}>
+            {loading ? 'Searching...' : 'Find cheaper →'}
+          </button>
+        </div>
+
+        {searched && results && (
+          <div>
+            <OverpayingBanner results={results} category={results.type} />
+
+            {results.items.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '3rem', background: 'white', borderRadius: '16px', border: '1.5px solid var(--border)' }}>
+                <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>✓</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.5rem' }}>You're already on a good deal</div>
+                <div style={{ color: 'var(--text-light)', fontSize: '0.9rem' }}>We couldn't find anything cheaper that meets your requirements right now.</div>
+              </div>
+            ) : (
+              <>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-light)', marginBottom: '1rem' }}>
+                  {results.items.length} cheaper option{results.items.length !== 1 ? 's' : ''} found
+                </p>
+                {results.items.map((item, i) => (
+                  <ResultRow key={item.id || i} item={item} index={i} results={results} category={results.type} />
+                ))}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </section>
+  )
+}
+
 function ResultRow({ item, index, results, category }) {
   const isTop = index === 0
-  const hasOffer = (item.freeMonths > 0) || (item.discountedMonths > 0 && item.discountAmount > 0)
-  const isBundle = item.isBundle
+  const hasOffer = (item.free_months > 0) || (item.discounted_months > 0 && item.discount_amount > 0)
+  const isBundle = item.is_bundle
 
   function getSaving() {
     if (category === 'savings') {
@@ -352,20 +371,19 @@ function ResultRow({ item, index, results, category }) {
 
   function getOfferBreakdown() {
     if (!hasOffer) return null
-    if (item.freeMonths > 0) {
-      const paidMonths = item.contractMonths - item.freeMonths
+    if (item.free_months > 0) {
+      const paidMonths = item.contract_months - item.free_months
       return [
         { label: `Months 1–${paidMonths}`, value: `$${item.price}/mo` },
-        { label: `Months ${paidMonths + 1}–${item.contractMonths}`, value: 'FREE' },
+        { label: `Months ${paidMonths + 1}–${item.contract_months}`, value: 'FREE' },
         { label: 'Avg monthly cost', value: `$${item.effective}/mo`, bold: true },
       ]
     }
-    if (item.discountedMonths > 0 && item.discountAmount > 0) {
-      const discountedPrice = item.price - item.discountAmount
-      const remainingMonths = item.contractMonths - item.discountedMonths
+    if (item.discounted_months > 0 && item.discount_amount > 0) {
+      const discountedPrice = item.price - item.discount_amount
       return [
-        { label: `Months 1–${item.discountedMonths}`, value: `$${discountedPrice}/mo` },
-        { label: `Months ${item.discountedMonths + 1}–${item.contractMonths}`, value: `$${item.price}/mo` },
+        { label: `Months 1–${item.discounted_months}`, value: `$${discountedPrice}/mo` },
+        { label: `Months ${item.discounted_months + 1}–${item.contract_months}`, value: `$${item.price}/mo` },
         { label: 'Avg monthly cost', value: `$${item.effective}/mo`, bold: true },
       ]
     }
@@ -374,25 +392,21 @@ function ResultRow({ item, index, results, category }) {
 
   const breakdown = getOfferBreakdown()
 
-  // Network/contract tags for mobile and broadband
   function getTags() {
     if (category !== 'mobile' && category !== 'broadband') return null
     const tags = []
     if (category === 'mobile') {
-      // Simple heuristic — bigger networks tend to have 5G
-      const has5g = ['Telstra','Optus','Vodafone','Boost Mobile','Belong','Felix Mobile'].includes(item.provider)
-      tags.push({ label: has5g ? '5G' : '4G', type: has5g ? '5g' : '4g' })
+      tags.push({ label: item.has_5g ? '5G' : '4G', type: item.has_5g ? '5g' : '4g' })
     }
-    if (!item.contractMonths || item.contractMonths <= 1) {
+    if (!item.contract_months || item.contract_months <= 1) {
       tags.push({ label: 'No lock-in', type: 'nolock' })
     } else {
-      tags.push({ label: `${item.contractMonths}-month contract`, type: 'contract' })
+      tags.push({ label: `${item.contract_months}-month contract`, type: 'contract' })
     }
     return tags
   }
 
   const tags = getTags()
-
   const tagColors = {
     '5g': { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe' },
     '4g': { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' },
@@ -403,239 +417,135 @@ function ResultRow({ item, index, results, category }) {
   return (
     <div style={{
       border: `1.5px solid ${isTop ? 'var(--brand)' : hasOffer || isBundle ? '#c4aaff' : 'var(--border)'}`,
-      borderRadius: '12px',
-      marginBottom: '0.75rem',
-      background: 'white',
-      overflow: 'hidden',
+      borderRadius: '12px', marginBottom: '0.75rem', background: 'white', overflow: 'hidden',
     }}>
-      {/* Banner */}
       {isTop && !hasOffer && !isBundle && (
-        <div style={{background: 'var(--brand)', color: 'white', fontSize: '0.7rem', fontWeight: 800, padding: '0.35rem 1.25rem', letterSpacing: '0.05em', textTransform: 'uppercase'}}>
+        <div style={{ background: 'var(--brand)', color: 'white', fontSize: '0.7rem', fontWeight: 800, padding: '0.35rem 1.25rem', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
           ★ Best value — cheapest effective monthly cost
         </div>
       )}
       {(hasOffer || isBundle) && (
-        <div style={{background: 'var(--offer)', color: 'white', fontSize: '0.7rem', fontWeight: 800, padding: '0.35rem 1.25rem', letterSpacing: '0.05em'}}>
-          🏷 {isBundle ? 'Bundle deal' : hasOffer && item.freeMonths > 0 ? `${item.freeMonths} months free · Avg monthly cost calculated honestly` : `$${item.discountAmount}/mo off first ${item.discountedMonths} months · Avg monthly cost calculated honestly`}
+        <div style={{ background: 'var(--offer)', color: 'white', fontSize: '0.7rem', fontWeight: 800, padding: '0.35rem 1.25rem', letterSpacing: '0.05em' }}>
+          🏷 {isBundle ? 'Bundle deal' : hasOffer && item.free_months > 0 ? `${item.free_months} months free · Avg monthly cost calculated honestly` : `$${item.discount_amount}/mo off first ${item.discounted_months} months · Avg monthly cost calculated honestly`}
         </div>
       )}
 
-      {/* Main row */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: category === 'savings' ? '2fr 1fr 1.3fr auto' : '2fr 1fr 1fr 1fr 1.3fr auto',
-        alignItems: 'center',
-        padding: '1rem 1.25rem',
-        gap: '0.75rem',
+        alignItems: 'center', padding: '1rem 1.25rem', gap: '0.75rem',
         background: isTop && !hasOffer ? 'var(--brand-light)' : 'white',
       }}>
-        {/* Provider */}
         <div>
-          <div style={{fontSize: '1rem', fontWeight: 800, color: 'var(--text)'}}>{item.provider}</div>
-          <div style={{fontSize: '0.7rem', color: 'var(--text-light)', marginTop: '0.15rem'}}>{item.meta || item.plan}</div>
+          <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text)' }}>{item.provider}</div>
+          <div style={{ fontSize: '0.7rem', color: 'var(--text-light)', marginTop: '0.15rem' }}>{item.meta || item.plan}</div>
+          {item.offer && (
+            <div style={{ fontSize: '0.7rem', color: '#7c3aed', marginTop: '0.2rem', fontWeight: 600 }}>🏷 {item.offer}</div>
+          )}
           {category === 'savings' && item.conditions && (
-            <div style={{fontSize: '0.7rem', color: '#b45309', marginTop: '0.2rem', fontWeight: 500}}>⚠ {item.conditions}</div>
+            <div style={{ fontSize: '0.7rem', color: '#b45309', marginTop: '0.2rem', fontWeight: 500 }}>⚠ {item.conditions}</div>
           )}
           {tags && (
-            <div style={{display: 'flex', gap: '0.3rem', marginTop: '0.35rem', flexWrap: 'wrap'}}>
+            <div style={{ display: 'flex', gap: '0.3rem', marginTop: '0.35rem', flexWrap: 'wrap' }}>
               {tags.map(tag => (
                 <span key={tag.label} style={{
-                  fontSize: '0.62rem', fontWeight: 700,
-                  padding: '0.15rem 0.5rem', borderRadius: '999px',
+                  fontSize: '0.62rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '999px',
                   border: `1px solid ${tagColors[tag.type].border}`,
-                  background: tagColors[tag.type].bg,
-                  color: tagColors[tag.type].color,
-                }}>
-                  {tag.label}
-                </span>
+                  background: tagColors[tag.type].bg, color: tagColors[tag.type].color,
+                }}>{tag.label}</span>
               ))}
             </div>
           )}
         </div>
 
-        {/* Stats */}
         {category === 'mobile' && <>
-          <div style={{textAlign: 'center'}}>
-            <div style={{fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-light)', marginBottom: '0.2rem'}}>Data</div>
-            <div style={{fontSize: '1rem', fontWeight: 800}}>{item.data >= 999 ? 'Unlimited' : `${item.data}GB`}</div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-light)', marginBottom: '0.2rem' }}>Data</div>
+            <div style={{ fontSize: '1rem', fontWeight: 800 }}>{item.data >= 999 ? 'Unlimited' : `${item.data}GB`}</div>
           </div>
-          <div style={{textAlign: 'center'}}>
-            <div style={{fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-light)', marginBottom: '0.2rem'}}>Calls</div>
-            <div style={{fontSize: '1rem', fontWeight: 800}}>Unltd</div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-light)', marginBottom: '0.2rem' }}>Calls</div>
+            <div style={{ fontSize: '1rem', fontWeight: 800 }}>Unltd</div>
           </div>
-          <div style={{textAlign: 'center'}}>
-            <div style={{fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-light)', marginBottom: '0.2rem'}}>SMS</div>
-            <div style={{fontSize: '1rem', fontWeight: 800}}>Unltd</div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-light)', marginBottom: '0.2rem' }}>SMS</div>
+            <div style={{ fontSize: '1rem', fontWeight: 800 }}>Unltd</div>
           </div>
         </>}
 
         {category === 'broadband' && <>
-          <div style={{textAlign: 'center'}}>
-            <div style={{fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-light)', marginBottom: '0.2rem'}}>Speed</div>
-            <div style={{fontSize: '1rem', fontWeight: 800}}>{item.speed >= 1000 ? '1Gbps' : `${item.speed}Mbps`}</div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-light)', marginBottom: '0.2rem' }}>Speed</div>
+            <div style={{ fontSize: '1rem', fontWeight: 800 }}>{item.speed >= 1000 ? '1Gbps' : `${item.speed}Mbps`}</div>
           </div>
-          <div style={{textAlign: 'center'}}>
-            <div style={{fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-light)', marginBottom: '0.2rem'}}>Eve. Speed</div>
-            <div style={{fontSize: '1rem', fontWeight: 800}}>{item.eve}</div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-light)', marginBottom: '0.2rem' }}>Eve. Speed</div>
+            <div style={{ fontSize: '1rem', fontWeight: 800 }}>{item.eve}</div>
           </div>
-          <div style={{textAlign: 'center'}}>
-            <div style={{fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-light)', marginBottom: '0.2rem'}}>Contract</div>
-            <div style={{fontSize: '0.82rem', fontWeight: 800}}>{!item.contractMonths || item.contractMonths <= 1 ? 'None' : `${item.contractMonths}mo`}</div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-light)', marginBottom: '0.2rem' }}>Contract</div>
+            <div style={{ fontSize: '0.82rem', fontWeight: 800 }}>{!item.contract_months || item.contract_months <= 1 ? 'None' : `${item.contract_months}mo`}</div>
           </div>
         </>}
 
-        {category === 'savings' && <>
-          <div style={{textAlign: 'center'}}>
-            <div style={{fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-light)', marginBottom: '0.2rem'}}>Rate p.a.</div>
-            <div style={{fontSize: '1rem', fontWeight: 800}}>{item.rate}%</div>
+        {category === 'savings' && (
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-light)', marginBottom: '0.2rem' }}>Rate p.a.</div>
+            <div style={{ fontSize: '1rem', fontWeight: 800 }}>{item.rate}%</div>
           </div>
-        </>}
+        )}
 
         {category === 'streaming' && <>
-          <div style={{textAlign: 'center'}}>
-            <div style={{fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-light)', marginBottom: '0.2rem'}}>Quality</div>
-            <div style={{fontSize: '1rem', fontWeight: 800}}>{item.quality}</div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-light)', marginBottom: '0.2rem' }}>Quality</div>
+            <div style={{ fontSize: '1rem', fontWeight: 800 }}>{item.quality}</div>
           </div>
-          <div style={{textAlign: 'center'}}>
-            <div style={{fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-light)', marginBottom: '0.2rem'}}>Screens</div>
-            <div style={{fontSize: '1rem', fontWeight: 800}}>{item.simultaneous || '—'}</div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-light)', marginBottom: '0.2rem' }}>Screens</div>
+            <div style={{ fontSize: '1rem', fontWeight: 800 }}>{item.simultaneous || '—'}</div>
           </div>
-          <div style={{textAlign: 'center'}}>
-            <div style={{fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-light)', marginBottom: '0.2rem'}}>Type</div>
-            <div style={{fontSize: '0.78rem', fontWeight: 800}}>{item.isBundle ? 'Bundle' : 'Single'}</div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-light)', marginBottom: '0.2rem' }}>Type</div>
+            <div style={{ fontSize: '0.78rem', fontWeight: 800 }}>{item.is_bundle ? 'Bundle' : 'Single'}</div>
           </div>
         </>}
 
-        {/* Price */}
-        <div style={{textAlign: 'center'}}>
+        <div style={{ textAlign: 'center' }}>
           {hasOffer && (
-            <div style={{fontSize: '0.62rem', color: '#bbb', marginBottom: '0.1rem'}}>Standard: <s>${item.price}/mo</s></div>
+            <div style={{ fontSize: '0.62rem', color: '#bbb', marginBottom: '0.1rem' }}>Standard: <s>${item.price}/mo</s></div>
           )}
-          {!hasOffer && <div style={{fontSize: '0.62rem', color: 'var(--text-light)', marginBottom: '0.15rem'}}>Monthly cost</div>}
+          {!hasOffer && <div style={{ fontSize: '0.62rem', color: 'var(--text-light)', marginBottom: '0.15rem' }}>Monthly cost</div>}
           <div style={{
             fontSize: '1.4rem', fontWeight: 800, lineHeight: 1,
             color: category === 'streaming' && item.price === 0 ? 'var(--brand)' : isTop ? 'var(--brand)' : 'var(--text)'
           }}>
             {getEffectivePrice()}
           </div>
-          <div style={{fontSize: '0.62rem', color: 'var(--text-light)'}}>{getPriceLabel()}</div>
-          <div style={{fontSize: '0.7rem', fontWeight: 700, color: 'var(--brand)', marginTop: '0.3rem'}}>{getSaving()}</div>
+          <div style={{ fontSize: '0.62rem', color: 'var(--text-light)' }}>{getPriceLabel()}</div>
+          <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--brand)', marginTop: '0.3rem' }}>{getSaving()}</div>
         </div>
 
-        {/* CTA */}
-        <button
-          onClick={() => window.open(item.url, '_blank')}
-          style={{
-            background: 'var(--brand)', color: 'white', border: 'none',
-            fontFamily: 'inherit', fontSize: '0.82rem', fontWeight: 700,
-            padding: '0.75rem 1.25rem', borderRadius: '8px', cursor: 'pointer',
-            whiteSpace: 'nowrap',
-          }}>
+        <button onClick={() => window.open(item.url, '_blank')} style={{
+          background: 'var(--brand)', color: 'white', border: 'none',
+          fontFamily: 'inherit', fontSize: '0.82rem', fontWeight: 700,
+          padding: '0.75rem 1.25rem', borderRadius: '8px', cursor: 'pointer', whiteSpace: 'nowrap',
+        }}>
           View plan →
         </button>
       </div>
 
-      {/* Offer breakdown row */}
       {breakdown && (
         <div style={{
-          background: 'var(--offer-light)',
-          borderTop: '1px solid #d8c8ff',
-          padding: '0.5rem 1.25rem',
-          display: 'flex',
-          gap: '2rem',
-          alignItems: 'center',
-          flexWrap: 'wrap',
+          background: 'var(--offer-light)', borderTop: '1px solid #d8c8ff',
+          padding: '0.5rem 1.25rem', display: 'flex', gap: '2rem', alignItems: 'center', flexWrap: 'wrap',
         }}>
-          {breakdown.map((item, i) => (
-            <span key={i} style={{fontSize: '0.7rem', color: 'var(--offer)', fontWeight: item.bold ? 700 : 500}}>
-              <strong style={{fontWeight: 700}}>{item.label}:</strong> {item.value}
+          {breakdown.map((b, i) => (
+            <span key={i} style={{ fontSize: '0.7rem', color: 'var(--offer)', fontWeight: b.bold ? 700 : 500 }}>
+              <strong style={{ fontWeight: 700 }}>{b.label}:</strong> {b.value}
             </span>
           ))}
         </div>
       )}
     </div>
   )
-}// ── DATA ─────────────────────────────────────────────────────────────────────
-
-const mobilePlans = [
-  {provider:"Telstra",meta:"Large network, best regional coverage",price:58,data:20,contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://telstra.com.au"},
-  {provider:"Telstra",meta:"Large network, best regional coverage",price:68,data:40,contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://telstra.com.au"},
-  {provider:"Telstra",meta:"Large network, best regional coverage",price:88,data:60,contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://telstra.com.au"},
-  {provider:"Optus",meta:"Strong metro and suburban coverage",price:49,data:20,contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://optus.com.au"},
-  {provider:"Optus",meta:"Strong metro and suburban coverage",price:59,data:40,contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://optus.com.au"},
-  {provider:"Optus",meta:"Strong metro and suburban coverage",price:79,data:100,contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://optus.com.au"},
-  {provider:"Vodafone",meta:"Good metro coverage",price:45,data:20,contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://vodafone.com.au"},
-  {provider:"Vodafone",meta:"Good metro coverage",price:55,data:40,contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://vodafone.com.au"},
-  {provider:"Belong",meta:"Runs on Telstra network",price:28,data:14,contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://belong.com.au"},
-  {provider:"Belong",meta:"Runs on Telstra network",price:38,data:25,contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://belong.com.au"},
-  {provider:"Boost Mobile",meta:"Runs on Telstra network · Best value Telstra MVNO",price:23,data:15,contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://boost.com.au"},
-  {provider:"Boost Mobile",meta:"Runs on Telstra network · Best value Telstra MVNO",price:30,data:25,contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://boost.com.au"},
-  {provider:"Boost Mobile",meta:"Runs on Telstra network · Best value Telstra MVNO",price:40,data:60,contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://boost.com.au"},
-  {provider:"Amaysim",meta:"Runs on Optus network",price:18,data:8,contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://amaysim.com.au"},
-  {provider:"Amaysim",meta:"Runs on Optus network",price:25,data:20,contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://amaysim.com.au"},
-  {provider:"Amaysim",meta:"Runs on Optus network",price:35,data:40,contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://amaysim.com.au"},
-  {provider:"Woolworths Mobile",meta:"Runs on Telstra network · Everyday Rewards points",price:20,data:10,contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://woolworthsmobile.com.au"},
-  {provider:"Woolworths Mobile",meta:"Runs on Telstra network · Everyday Rewards points",price:30,data:30,contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://woolworthsmobile.com.au"},
-  {provider:"Aldi Mobile",meta:"Runs on Telstra network",price:15,data:8,contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://aldimobile.com.au"},
-  {provider:"Aldi Mobile",meta:"Runs on Telstra network",price:20,data:15,contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://aldimobile.com.au"},
-  {provider:"Circles.Life",meta:"Runs on Optus network · Highly customisable",price:18,data:8,contractMonths:6,freeMonths:3,discountedMonths:0,discountAmount:0,url:"https://circles.life/au"},
-  {provider:"Circles.Life",meta:"Runs on Optus network · Highly customisable",price:28,data:30,contractMonths:6,freeMonths:3,discountedMonths:0,discountAmount:0,url:"https://circles.life/au"},
-  {provider:"Lebara",meta:"Runs on Vodafone network · Great for international calls",price:14,data:5,contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://lebara.com.au"},
-  {provider:"Lebara",meta:"Runs on Vodafone network · Great for international calls",price:24,data:20,contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://lebara.com.au"},
-  {provider:"Tangerine",meta:"Runs on Telstra network",price:18,data:15,contractMonths:12,freeMonths:0,discountedMonths:6,discountAmount:10,url:"https://tangerine.com.au"},
-  {provider:"Tangerine",meta:"Runs on Telstra network",price:28,data:35,contractMonths:12,freeMonths:0,discountedMonths:6,discountAmount:10,url:"https://tangerine.com.au"},
-  {provider:"Kogan Mobile",meta:"Runs on Vodafone network",price:15,data:8,contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://kogan.com/au/kogan-mobile"},
-  {provider:"Kogan Mobile",meta:"Runs on Vodafone network",price:22,data:20,contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://kogan.com/au/kogan-mobile"},
-  {provider:"Felix Mobile",meta:"Runs on Optus network · Carbon neutral",price:35,data:999,contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://felix.com.au"},
-  {provider:"Spintel",meta:"Runs on Optus network",price:19,data:15,contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://spintel.net.au"},
-]
-
-const broadbandPlans = [
-  {provider:"Aussie Broadband",meta:"Top-rated for customer service",price:69,speed:50,eve:"47 Mbps",contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://aussiebroadband.com.au"},
-  {provider:"Aussie Broadband",meta:"Top-rated for customer service",price:89,speed:100,eve:"95 Mbps",contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://aussiebroadband.com.au"},
-  {provider:"Superloop",meta:"Fast evening speeds",price:69,speed:50,eve:"47 Mbps",contractMonths:12,freeMonths:2,discountedMonths:0,discountAmount:0,url:"https://superloop.com"},
-  {provider:"Superloop",meta:"Fast evening speeds",price:79,speed:100,eve:"90 Mbps",contractMonths:12,freeMonths:2,discountedMonths:0,discountAmount:0,url:"https://superloop.com"},
-  {provider:"Tangerine",meta:"Budget-friendly with intro discount",price:54,speed:50,eve:"45 Mbps",contractMonths:18,freeMonths:0,discountedMonths:6,discountAmount:20,url:"https://tangerine.com.au"},
-  {provider:"Tangerine",meta:"Budget-friendly with intro discount",price:64,speed:100,eve:"88 Mbps",contractMonths:18,freeMonths:0,discountedMonths:6,discountAmount:20,url:"https://tangerine.com.au"},
-  {provider:"TPG",meta:"No lock-in, reliable network",price:59,speed:25,eve:"22 Mbps",contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://tpg.com.au"},
-  {provider:"TPG",meta:"No lock-in, reliable network",price:69,speed:50,eve:"46 Mbps",contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://tpg.com.au"},
-  {provider:"TPG",meta:"No lock-in, reliable network",price:79,speed:100,eve:"91 Mbps",contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://tpg.com.au"},
-  {provider:"Exetel",meta:"1 month free on 12-month contract",price:59,speed:50,eve:"45 Mbps",contractMonths:12,freeMonths:1,discountedMonths:0,discountAmount:0,url:"https://exetel.com.au"},
-  {provider:"Exetel",meta:"1 month free on 12-month contract",price:69,speed:100,eve:"87 Mbps",contractMonths:12,freeMonths:1,discountedMonths:0,discountAmount:0,url:"https://exetel.com.au"},
-  {provider:"Dodo",meta:"Budget option, no lock-in",price:55,speed:25,eve:"20 Mbps",contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://dodo.com"},
-  {provider:"Dodo",meta:"Budget option, no lock-in",price:65,speed:50,eve:"44 Mbps",contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://dodo.com"},
-  {provider:"Belong",meta:"Telstra-owned, simple plans",price:65,speed:25,eve:"22 Mbps",contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://belong.com.au"},
-  {provider:"Belong",meta:"Telstra-owned, simple plans",price:75,speed:50,eve:"46 Mbps",contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://belong.com.au"},
-  {provider:"Spintel",meta:"Budget-friendly, no lock-in",price:49,speed:25,eve:"21 Mbps",contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://spintel.net.au"},
-  {provider:"Spintel",meta:"Budget-friendly, no lock-in",price:59,speed:50,eve:"44 Mbps",contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://spintel.net.au"},
-  {provider:"Kogan Internet",meta:"Cheap, no lock-in",price:55,speed:25,eve:"22 Mbps",contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://kogan.com/au/kogan-internet"},
-  {provider:"Kogan Internet",meta:"Cheap, no lock-in",price:65,speed:50,eve:"45 Mbps",contractMonths:1,freeMonths:0,discountedMonths:0,discountAmount:0,url:"https://kogan.com/au/kogan-internet"},
-]
-
-const savingsAccounts = [
-  {provider:"BOQ Future Saver",meta:"Bank of Queensland",rate:5.80,conditions:"Age 14–35, deposit $1,000/mo",url:"https://boq.com.au"},
-  {provider:"ING Savings Maximiser",meta:"ING Direct",rate:5.50,conditions:"Deposit $1,000/mo + 5 card purchases",url:"https://ing.com.au"},
-  {provider:"Great Southern Bank",meta:"Great Southern Bank",rate:5.50,conditions:"Deposit $1/mo, no withdrawals",url:"https://greatsouthernbank.com.au"},
-  {provider:"Rabobank High Interest",meta:"Rabobank",rate:5.40,conditions:"Intro rate first 4 months",url:"https://rabobank.com.au"},
-  {provider:"Macquarie Savings",meta:"Macquarie Bank",rate:5.35,conditions:"Intro rate first 4 months",url:"https://macquarie.com.au"},
-  {provider:"Virgin Money Boost Saver",meta:"Virgin Money",rate:5.35,conditions:"10 transactions/mo on linked account",url:"https://virginmoney.com.au"},
-  {provider:"Westpac Life",meta:"Westpac",rate:5.20,conditions:"Grow balance each month",url:"https://westpac.com.au"},
-  {provider:"Ubank Save",meta:"Ubank (NAB)",rate:5.10,conditions:"Deposit $200/mo",url:"https://ubank.com.au"},
-  {provider:"ANZ Plus Save",meta:"ANZ",rate:5.00,conditions:"Deposit $10+ per month",url:"https://anz.com.au"},
-  {provider:"NAB Reward Saver",meta:"NAB",rate:5.00,conditions:"One deposit, no withdrawals per month",url:"https://nab.com.au"},
-  {provider:"Commonwealth GoalSaver",meta:"CommBank",rate:4.90,conditions:"Deposit $200+ per month",url:"https://commbank.com.au"},
-]
-
-const streamingServices = [
-  {provider:"Netflix",plan:"Standard with Ads",price:7.99,quality:"1080p",simultaneous:2,tags:["entertainment"],url:"https://netflix.com/au",meta:"Ad-supported · 2 screens · 1080p"},
-  {provider:"Netflix",plan:"Standard",price:18.99,quality:"1080p",simultaneous:2,tags:["entertainment"],url:"https://netflix.com/au",meta:"No ads · 2 screens · 1080p"},
-  {provider:"Stan",plan:"Basic",price:10,quality:"1080p",simultaneous:1,tags:["entertainment"],url:"https://stan.com.au",meta:"1 screen · 1080p"},
-  {provider:"Disney+",plan:"Standard",price:13.99,quality:"4K",simultaneous:4,tags:["entertainment","kids"],url:"https://disneyplus.com/en-au",meta:"4 screens · 4K · Disney, Marvel, Star Wars"},
-  {provider:"Binge",plan:"Basic",price:10,quality:"1080p",simultaneous:1,tags:["entertainment"],url:"https://binge.com.au",meta:"1 screen · 1080p"},
-  {provider:"Apple TV+",plan:"Monthly",price:12.99,quality:"4K",simultaneous:6,tags:["entertainment"],url:"https://tv.apple.com",meta:"6 screens · 4K · Originals only"},
-  {provider:"Paramount+",plan:"Monthly",price:8.99,quality:"4K",simultaneous:3,tags:["entertainment","sport"],url:"https://paramountplus.com/au",meta:"3 screens · 4K"},
-  {provider:"Kayo Sports",plan:"Basic",price:25,quality:"4K",simultaneous:2,tags:["sport"],url:"https://kayosports.com.au",meta:"2 screens · 4K · 50+ sports"},
-  {provider:"ABC iview",plan:"Free",price:0,quality:"1080p",simultaneous:99,tags:["entertainment","kids"],url:"https://iview.abc.net.au",meta:"Free forever · No subscription required"},
-  {provider:"SBS On Demand",plan:"Free",price:0,quality:"1080p",simultaneous:99,tags:["entertainment"],url:"https://sbs.com.au/ondemand",meta:"Free forever · Ad-supported"},
-  {provider:"Netflix + Disney+",plan:"Bundle",price:29.99,quality:"4K",simultaneous:4,tags:["entertainment","kids"],url:"https://netflix.com/au",meta:"Netflix Standard + Disney+ Standard",isBundle:true},
-]
+}
