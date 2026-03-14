@@ -66,12 +66,18 @@ function OverpayingBanner({ results, category }) {
           </svg>
         </div>
         <div>
-          <div style={{ fontSize: '15px', fontWeight: 700, color: '#7a5c00' }}>
-            You could be overpaying by up to <strong>${maxSaving.toLocaleString()}/year</strong>
-          </div>
-          <div style={{ fontSize: '12px', color: '#9a7300', marginTop: '2px' }}>
-            {results.items.length} cheaper option{results.items.length !== 1 ? 's' : ''} found below
-          </div>
+         <div style={{ fontSize: '15px', fontWeight: 700, color: '#7a5c00' }}>
+  {category === 'savings'
+    ? <>You could be earning an extra <strong>${maxSaving.toLocaleString()}/year</strong> in interest</>
+    : <>You could be overpaying by up to <strong>${maxSaving.toLocaleString()}/year</strong></>
+  }
+</div>
+<div style={{ fontSize: '12px', color: '#9a7300', marginTop: '2px' }}>
+  {category === 'savings'
+    ? `${results.items.length} higher-rate account${results.items.length !== 1 ? 's' : ''} found below`
+    : `${results.items.length} cheaper option${results.items.length !== 1 ? 's' : ''} found below`
+  }
+</div>
         </div>
       </div>
 
